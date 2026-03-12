@@ -1,5 +1,6 @@
 """Unit tests for items API."""
 import io
+import uuid
 import pytest
 
 
@@ -151,6 +152,59 @@ class TestCategories:
         assert "work" in names
         assert "personal" in names
 
+    def test_update_category_color(self, client):
+        client.post("/api/categories", json={"name": "design", "color": "#000000"})
+
+        resp = client.put("/api/categories/design", json={"color": "#ff00ff"})
+        assert resp.status_code == 200
+        assert resp.json()["color"] == "#ff00ff"
+
+    def test_update_category_sort_order(self, client):
+        client.post("/api/categories", json={"name": "alpha"})
+
+        resp = client.put("/api/categories/alpha", json={"sort_order": 5})
+        assert resp.status_code == 200
+        assert resp.json()["sort_order"] == 5
+
+    def test_rename_category(self, client):
+        client.post("/api/categories", json={"name": "old_name", "color": "#aabb00"})
+        # Create an item in that category
+        client.post("/api/items", json={"title": "Cat Item", "content": "x", "category": "old_name"})
+
+        resp = client.put("/api/categories/old_name", json={"name": "new_name"})
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "new_name"
+
+        # Item should now be in new category
+        resp = client.get("/api/items?category=new_name")
+        items = resp.json()
+        assert any(i["title"] == "Cat Item" for i in items)
+
+        # Old category should be gone
+        resp = client.get("/api/items?category=old_name")
+        assert len(resp.json()) == 0
+
+    def test_delete_category(self, client):
+        client.post("/api/categories", json={"name": "temp_cat"})
+        client.post("/api/items", json={"title": "Orphan", "content": "x", "category": "temp_cat"})
+
+        resp = client.delete("/api/categories/temp_cat")
+        assert resp.status_code == 200
+
+        # Item should be uncategorized
+        resp = client.get("/api/items")
+        orphan = [i for i in resp.json() if i["title"] == "Orphan"]
+        assert len(orphan) == 1
+        assert orphan[0]["category"] == ""
+
+    def test_delete_nonexistent_category(self, client):
+        resp = client.delete("/api/categories/nonexistent")
+        assert resp.status_code == 404
+
+    def test_update_nonexistent_category(self, client):
+        resp = client.put("/api/categories/nonexistent", json={"color": "#fff"})
+        assert resp.status_code == 404
+
 
 class TestSync:
     def test_sync_status(self, client):
@@ -241,3 +295,251 @@ class TestStaticFiles:
     def test_serve_icon(self, client):
         resp = client.get("/icons/icon-192.png")
         assert resp.status_code == 200
+
+    def test_serve_svg_icon(self, client, tmp_path):
+        """SVG icon gets correct media type."""
+        icons_dir = tmp_path / "public" / "icons"
+        (icons_dir / "icon.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+        resp = client.get("/icons/icon.svg")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("image/svg+xml")
+
+    def test_serve_ico_icon(self, client, tmp_path):
+        """ICO icon gets correct media type."""
+        icons_dir = tmp_path / "public" / "icons"
+        (icons_dir / "favicon.ico").write_bytes(b"\x00\x00\x01\x00")
+        resp = client.get("/icons/favicon.ico")
+        assert resp.status_code == 200
+        assert "icon" in resp.headers["content-type"]
+
+    def test_icon_not_found(self, client):
+        resp = client.get("/icons/nonexistent.png")
+        assert resp.status_code == 404
+
+    def test_js_not_found(self, client):
+        resp = client.get("/js/nonexistent.js")
+        assert resp.status_code == 404
+
+
+class TestNoteEdgeCases:
+    def test_create_note_with_pinned(self, client):
+        resp = client.post("/api/items", json={
+            "title": "Pinned Note",
+            "content": "pinned on create",
+            "pinned": True,
+        })
+        assert resp.status_code == 200
+        assert resp.json()["pinned"] == 1
+
+    def test_update_note_with_new_category(self, client):
+        resp = client.post("/api/items", json={"title": "Cat Note", "content": "x"})
+        item_id = resp.json()["id"]
+
+        resp = client.put(f"/api/items/{item_id}", json={"category": "newcat"})
+        assert resp.status_code == 200
+        assert resp.json()["category"] == "newcat"
+
+    def test_update_nonexistent_item(self, client):
+        resp = client.put("/api/items/nonexistent", json={"title": "Nope"})
+        assert resp.status_code == 404
+
+    def test_delete_nonexistent_item(self, client):
+        resp = client.delete("/api/items/nonexistent")
+        assert resp.status_code == 404
+
+    def test_toggle_pin_nonexistent(self, client):
+        resp = client.patch("/api/items/nonexistent/pin")
+        assert resp.status_code == 404
+
+
+class TestFileEdgeCases:
+    def test_upload_filename_collision(self, client, tmp_content_dir):
+        """Uploading a file with the same name creates a numbered copy."""
+        client.post("/api/items/upload", files={
+            "file": ("dupe.txt", b"first", "text/plain"),
+        })
+        resp = client.post("/api/items/upload", files={
+            "file": ("dupe.txt", b"second", "text/plain"),
+        })
+        assert resp.status_code == 200
+        assert "dupe_1.txt" in resp.json()["filename"]
+
+    def test_upload_with_pinned(self, client):
+        resp = client.post("/api/items/upload", data={
+            "pinned": "true",
+        }, files={
+            "file": ("pin.txt", b"pin me", "text/plain"),
+        })
+        assert resp.status_code == 200
+        assert resp.json()["pinned"] == 1
+
+    def test_download_nonexistent(self, client):
+        resp = client.get("/api/items/nonexistent/download")
+        assert resp.status_code == 404
+
+    def test_download_note_item(self, client):
+        """Downloading a note (not a file) returns 400."""
+        resp = client.post("/api/items", json={"title": "Note", "content": "x"})
+        item_id = resp.json()["id"]
+        resp = client.get(f"/api/items/{item_id}/download")
+        assert resp.status_code == 400
+
+    def test_download_missing_file_on_disk(self, client, tmp_content_dir):
+        """File item exists in DB but file was deleted from disk."""
+        resp = client.post("/api/items/upload", files={
+            "file": ("ghost.txt", b"boo", "text/plain"),
+        })
+        item_id = resp.json()["id"]
+        filename = resp.json()["filename"]
+        # Remove file from disk
+        (tmp_content_dir / filename).unlink()
+
+        resp = client.get(f"/api/items/{item_id}/download")
+        assert resp.status_code == 404
+
+    def test_share_file_collision(self, client, tmp_content_dir):
+        """Sharing a file with a name that already exists creates a numbered copy."""
+        # Create the first file directly on disk
+        (tmp_content_dir / "collision.jpg").write_bytes(b"\xff")
+
+        resp = client.post("/api/share", data={
+            "title": "Photo",
+        }, files={
+            "file": ("collision.jpg", b"\xff\xd8\xff\xe0", "image/jpeg"),
+        })
+        assert resp.status_code == 200
+        assert "collision_1.jpg" in resp.json()["filename"]
+
+
+class TestRenderEndpoint:
+    def test_render_note(self, client):
+        resp = client.post("/api/items", json={"title": "Render Me", "content": "hello"})
+        item_id = resp.json()["id"]
+
+        resp = client.get(f"/api/items/{item_id}/render")
+        assert resp.status_code == 200
+        assert "hello" in resp.text
+
+    def test_render_nonexistent(self, client):
+        resp = client.get("/api/items/nonexistent/render")
+        assert resp.status_code == 404
+
+    def test_render_html_file(self, client, tmp_content_dir):
+        (tmp_content_dir / "page.html").write_text("<h1>Hello</h1>")
+        resp = client.post("/api/items/upload", files={
+            "file": ("page.html", b"<h1>Hello</h1>", "text/html"),
+        })
+        item_id = resp.json()["id"]
+
+        resp = client.get(f"/api/items/{item_id}/render")
+        assert resp.status_code == 200
+        assert "<h1>Hello</h1>" in resp.text
+
+    def test_render_markdown_file(self, client, tmp_content_dir):
+        (tmp_content_dir / "doc.md").write_text("# Title\n\nParagraph")
+        resp = client.post("/api/items/upload", files={
+            "file": ("doc.md", b"# Title\n\nParagraph", "text/markdown"),
+        })
+        item_id = resp.json()["id"]
+
+        resp = client.get(f"/api/items/{item_id}/render")
+        assert resp.status_code == 200
+        # Should contain rendered HTML (either via mistune or pre-wrapped)
+        assert "Title" in resp.text
+
+    def test_render_plain_text_file(self, client, tmp_content_dir):
+        (tmp_content_dir / "plain.txt").write_text("just text")
+        resp = client.post("/api/items/upload", files={
+            "file": ("plain.txt", b"just text", "text/plain"),
+        })
+        item_id = resp.json()["id"]
+
+        resp = client.get(f"/api/items/{item_id}/render")
+        assert resp.status_code == 200
+        assert "just text" in resp.text
+
+    def test_render_file_missing_on_disk(self, client, tmp_content_dir):
+        resp = client.post("/api/items/upload", files={
+            "file": ("gone.html", b"<p>gone</p>", "text/html"),
+        })
+        item_id = resp.json()["id"]
+        filename = resp.json()["filename"]
+        (tmp_content_dir / filename).unlink()
+
+        resp = client.get(f"/api/items/{item_id}/render")
+        assert resp.status_code == 404
+
+
+class TestSyncEdgeCases:
+    def test_sync_push_update_existing(self, client):
+        """Push an update to an existing item (covers upsert update path)."""
+        # Create an item first
+        resp = client.post("/api/items", json={
+            "title": "Original", "content": "v1",
+        })
+        item_id = resp.json()["id"]
+
+        # Push an update with a newer timestamp
+        resp = client.post("/api/sync/push", json={
+            "items": [{
+                "id": item_id,
+                "type": "note",
+                "title": "Updated via Sync",
+                "content": "v2",
+                "category": "",
+                "updated_at": "2099-01-01T00:00:00Z",
+            }]
+        })
+        assert resp.status_code == 200
+
+        resp = client.get(f"/api/items/{item_id}")
+        assert resp.json()["title"] == "Updated via Sync"
+        assert resp.json()["_version"] == 2
+
+
+class TestDatabaseEdgeCases:
+    def test_update_item_no_valid_fields(self, client):
+        """Update with no recognized fields returns the item unchanged."""
+        resp = client.post("/api/items", json={"title": "Unchanged", "content": "x"})
+        item_id = resp.json()["id"]
+
+        import database
+        result = database.update_item(item_id, bogus_field="nope")
+        assert result is not None
+        assert result["title"] == "Unchanged"
+        assert result["_version"] == 1
+
+    def test_update_nonexistent_item_db(self):
+        """update_item on missing ID returns None."""
+        import database
+        result = database.update_item("nonexistent_id", title="nope")
+        assert result is None
+
+    def test_toggle_pin_nonexistent_db(self):
+        """toggle_pin on missing ID returns None."""
+        import database
+        result = database.toggle_pin("nonexistent_id")
+        assert result is None
+
+    def test_update_category_no_valid_fields(self, client):
+        """update_category with no recognized fields returns the category."""
+        client.post("/api/categories", json={"name": "nochange", "color": "#abc"})
+
+        import database
+        result = database.update_category("nochange")
+        assert result is not None
+        assert result["name"] == "nochange"
+
+    def test_rename_nonexistent_category_db(self):
+        """rename_category on missing name returns None."""
+        import database
+        result = database.rename_category("ghost", "new_ghost")
+        assert result is None
+
+
+class TestWebSocket:
+    def test_websocket_ping_pong(self, client):
+        with client.websocket_connect("/ws") as ws:
+            ws.send_text("ping")
+            data = ws.receive_json()
+            assert data["event"] == "pong"
