@@ -211,7 +211,36 @@ if __name__ == "__main__":
     import uvicorn
 
     parser = argparse.ArgumentParser(description="Personal Share Server")
-    parser.add_argument("--port", type=int, default=9100, help="Port number (default: 9100)")
+    parser.add_argument("--port", type=int, default=None, help="Port number")
+    parser.add_argument("--test", action="store_true", help="Run in test mode with seeded data on port 9101")
     args = parser.parse_args()
 
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    if args.test:
+        from config import DATA_DIR, TEST_PORT
+        import database
+
+        test_db = DATA_DIR / "test_share.db"
+        test_content = DATA_DIR / "test_content"
+
+        # Point config at test paths
+        import config
+        config.DB_PATH = test_db
+        config.CONTENT_DIR = test_content
+        CONTENT_DIR = test_content  # Update local import
+
+        # Also patch the items module
+        import modules.items as items_mod
+        items_mod.CONTENT_DIR = test_content
+
+        database.set_db_path(test_db)
+
+        # Seed test data
+        from seed_test_data import seed
+        seed()
+
+        port = args.port or TEST_PORT
+        print(f"\n=== TEST MODE — port {port}, db: {test_db}, content: {test_content} ===\n")
+    else:
+        port = args.port or 9100
+
+    uvicorn.run(app, host="0.0.0.0", port=port)

@@ -1,4 +1,9 @@
 [run]
 omit =
     src/modules/watcher.py
+    src/seed_test_data.py
     test/*
+
+[report]
+exclude_lines =
+    if __name__ == .__main__.
