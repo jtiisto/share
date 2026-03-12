@@ -1,0 +1,20 @@
+# Plans and design docs (local only)
+plans/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Runtime data
+data/
+*.db
+
+# Server runtime files
+.server.pid
+server.log
+
+# Environment
+.env
