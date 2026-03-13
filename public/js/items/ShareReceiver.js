@@ -1,64 +1,39 @@
 /**
- * ShareReceiver — Handles ?title=&text=&url= query params from PWA share target
- * Falls back to local queue when offline, drains queue on reconnect.
+ * ShareReceiver — Handles share target results and offline queue draining.
+ *
+ * The manifest share_target POSTs to /share/, which the service worker intercepts,
+ * forwards to the backend API (or queues offline), and redirects here with a
+ * ?shared=success|error|queued query param. This component reads that param
+ * and shows the appropriate notification.
  */
 import { h } from 'preact';
 import { useEffect } from 'preact/hooks';
 import htm from 'htm';
-import { showNotification, queueShare, processShareQueue } from '../store.js';
+import { showNotification } from '../store.js';
 
 const html = htm.bind(h);
 
 export function ShareReceiver() {
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
-        const title = params.get('title');
-        const text = params.get('text');
-        const url = params.get('url');
+        const shared = params.get('shared');
 
-        if (title || text || url) {
-            handleSharedContent(title, text, url);
+        if (shared) {
+            if (shared === 'success') {
+                showNotification('Shared content saved', 'success');
+            } else if (shared === 'queued') {
+                showNotification('Queued offline, will sync later', 'warning');
+            } else if (shared === 'error') {
+                showNotification('Failed to save shared content', 'error');
+            }
             window.history.replaceState({}, '', '/share/');
         }
 
-        // Also tell SW to drain its queue
+        // Tell SW to drain its offline queue (in case items were queued earlier)
         if (navigator.serviceWorker && navigator.serviceWorker.controller) {
             navigator.serviceWorker.controller.postMessage('drain-share-queue');
         }
     }, []);
-
-    async function handleSharedContent(title, text, url) {
-        if (!navigator.onLine) {
-            // Queue locally for later
-            await queueShare({ title, text, url });
-            showNotification('Shared content queued (offline)', 'warning');
-            return;
-        }
-
-        try {
-            const form = new FormData();
-            if (title) form.append('title', title);
-            if (text) form.append('text', text);
-            if (url) form.append('url', url);
-
-            const res = await fetch('/share/api/share', { method: 'POST', body: form });
-            if (res.ok) {
-                showNotification('Shared content saved', 'success');
-            } else {
-                // Might be queued by SW (202)
-                const data = await res.json().catch(() => null);
-                if (data?.queued) {
-                    showNotification('Queued offline, will sync later', 'warning');
-                } else {
-                    showNotification('Failed to save shared content', 'error');
-                }
-            }
-        } catch {
-            // Offline — queue it
-            await queueShare({ title, text, url });
-            showNotification('Shared content queued (offline)', 'warning');
-        }
-    }
 
     return null;
 }

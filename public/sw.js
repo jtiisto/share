@@ -49,6 +49,7 @@ function openQueueDB() {
 }
 
 async function enqueueShare(data) {
+  // data may contain { title, text, url, fileName, fileType, fileBlob }
   const db = await openQueueDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('queue', 'readwrite');
@@ -75,6 +76,11 @@ async function drainShareQueue() {
       if (entry.title) form.append('title', entry.title);
       if (entry.text) form.append('text', entry.text);
       if (entry.url) form.append('url', entry.url);
+      if (entry.fileBlob) {
+        form.append('file', new File([entry.fileBlob], entry.fileName || 'shared_file', {
+          type: entry.fileType || 'application/octet-stream'
+        }));
+      }
       await fetch(B + '/api/share', { method: 'POST', body: form });
     } catch {
       // If still offline, stop trying
@@ -122,6 +128,14 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Intercept share target POST to app URL — the browser POSTs FormData here
+  // when the user shares content (text, URLs, or files) from another Android app.
+  // We extract the data, forward it to the backend API, and redirect to the app.
+  if ((url.pathname === B + '/' || url.pathname === B) && request.method === 'POST') {
+    event.respondWith(handleShareTargetPost(request));
+    return;
+  }
+
   // Intercept POST /share/api/share when offline — queue for later
   if (url.pathname === B + '/api/share' && request.method === 'POST') {
     event.respondWith(handleShareRequest(request));
@@ -144,6 +158,56 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(networkFirstAppShell(request));
   }
 });
+
+// ---------------------------------------------------------------------------
+// Handle share target POST (from Android share intent via manifest share_target)
+// The browser POSTs multipart FormData to the action URL. We forward it to the
+// backend API and redirect the user to the app with a result query param.
+// ---------------------------------------------------------------------------
+async function handleShareTargetPost(request) {
+  try {
+    const formData = await request.formData();
+
+    // Build a new FormData to forward to the backend API
+    const apiForm = new FormData();
+    const title = formData.get('title');
+    const text = formData.get('text');
+    const url = formData.get('url');
+    const file = formData.get('file');
+
+    if (title) apiForm.append('title', title);
+    if (text) apiForm.append('text', text);
+    if (url) apiForm.append('url', url);
+    if (file && file instanceof File && file.size > 0) {
+      apiForm.append('file', file, file.name);
+    }
+
+    try {
+      const resp = await fetch(B + '/api/share', { method: 'POST', body: apiForm });
+      if (resp.ok) {
+        return Response.redirect(B + '/?shared=success', 303);
+      }
+      return Response.redirect(B + '/?shared=error', 303);
+    } catch {
+      // Offline — queue for later (including file blob if present)
+      const queueData = {};
+      if (title) queueData.title = title;
+      if (text) queueData.text = text;
+      if (url) queueData.url = url;
+      if (file && file instanceof File && file.size > 0) {
+        queueData.fileBlob = await file.arrayBuffer();
+        queueData.fileName = file.name;
+        queueData.fileType = file.type;
+      }
+      if (Object.keys(queueData).length > 0) {
+        await enqueueShare(queueData);
+      }
+      return Response.redirect(B + '/?shared=queued', 303);
+    }
+  } catch {
+    return Response.redirect(B + '/?shared=error', 303);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Handle share requests (with offline fallback)
