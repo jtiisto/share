@@ -26,17 +26,17 @@ Use the fetch CLI at the Personal Share project:
 
 ```bash
 # List items to find the right one:
-/home/jtiisto/dev/share/bin/personal-fetch.sh --list
+$SHARE_DIR/bin/personal-fetch.sh --list
 
 # List only files or notes:
-/home/jtiisto/dev/share/bin/personal-fetch.sh --list --type file
-/home/jtiisto/dev/share/bin/personal-fetch.sh --list --type note
+$SHARE_DIR/bin/personal-fetch.sh --list --type file
+$SHARE_DIR/bin/personal-fetch.sh --list --type note
 
 # Fetch by title match:
-/home/jtiisto/dev/share/bin/personal-fetch.sh "search term"
+$SHARE_DIR/bin/personal-fetch.sh "search term"
 
 # Fetch to a specific directory:
-/home/jtiisto/dev/share/bin/personal-fetch.sh -o /tmp "search term"
+$SHARE_DIR/bin/personal-fetch.sh -o /tmp "search term"
 ```
 
 The server runs on port 9100 (production). If the user says "test" or you know the test server is running, use `-p 9101`.
@@ -45,25 +45,25 @@ The server runs on port 9100 (production). If the user says "test" or you know t
 
 1. First, list items to find what the user is looking for:
    ```bash
-   /home/jtiisto/dev/share/bin/personal-fetch.sh --list
+   $SHARE_DIR/bin/personal-fetch.sh --list
    ```
 2. Identify the best match for the user's request from the list
 3. If the match is ambiguous (multiple plausible items), ask the user which one they want
 4. Fetch the item using a specific enough search term to get exactly one match:
    ```bash
-   /home/jtiisto/dev/share/bin/personal-fetch.sh -o /path/to/dir "exact title or unique part"
+   $SHARE_DIR/bin/personal-fetch.sh -o /path/to/dir "exact title or unique part"
    ```
 5. Report the saved file path
 
 ## Examples
 
 User: "fetch the cookie recipe from share"
-→ First: `/home/jtiisto/dev/share/bin/personal-fetch.sh --list --type note`
-→ Find the recipe, then: `/home/jtiisto/dev/share/bin/personal-fetch.sh "cookie recipe"`
+→ First: `$SHARE_DIR/bin/personal-fetch.sh --list --type note`
+→ Find the recipe, then: `$SHARE_DIR/bin/personal-fetch.sh "cookie recipe"`
 
 User: "download the PDF I shared earlier to /tmp"
-→ First: `/home/jtiisto/dev/share/bin/personal-fetch.sh --list --type file`
-→ Then: `/home/jtiisto/dev/share/bin/personal-fetch.sh -o /tmp "report.pdf"`
+→ First: `$SHARE_DIR/bin/personal-fetch.sh --list --type file`
+→ Then: `$SHARE_DIR/bin/personal-fetch.sh -o /tmp "report.pdf"`
 
 User: "/personal-fetch deploy reminder"
-→ `/home/jtiisto/dev/share/bin/personal-fetch.sh "deploy reminder"`
+→ `$SHARE_DIR/bin/personal-fetch.sh "deploy reminder"`

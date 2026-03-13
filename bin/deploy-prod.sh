@@ -125,7 +125,7 @@ deploy_skill() {
 
     echo "  Syncing $skill_name skill..."
     mkdir -p "$prod_dir"
-    sed "s|$PROJECT_ROOT|$PROD_DIR|g" "$src_dir/SKILL.md" > "$prod_dir/SKILL.md"
+    sed "s|\$SHARE_DIR|$PROD_DIR|g" "$src_dir/SKILL.md" > "$prod_dir/SKILL.md"
 
     if [ -L "$link_dir" ]; then
         rm "$link_dir"
