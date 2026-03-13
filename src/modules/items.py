@@ -15,6 +15,7 @@ from database import (
     create_item, get_item, list_items, update_item, delete_item, toggle_pin,
     list_categories, create_category, update_category, rename_category,
     delete_category as db_delete_category, get_category, ensure_category,
+    cleanup_empty_category,
     get_items_since, upsert_item_from_sync, get_meta, set_meta,
     get_utc_now, generate_id,
 )
@@ -86,11 +87,25 @@ def api_get_item(item_id: str):
 @router.put("/items/{item_id}")
 def api_update_item(item_id: str, note: NoteUpdate):
     updates = note.model_dump(exclude_none=True)
-    if "category" in updates and updates["category"]:
-        ensure_category(updates["category"])
+
+    # Track old category before update for cleanup
+    old_category = None
+    if "category" in updates:
+        existing = get_item(item_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Item not found")
+        old_category = existing.get("category", "")
+        if updates["category"]:
+            ensure_category(updates["category"])
+
     item = update_item(item_id, **updates)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+
+    # Clean up old category if it changed
+    if old_category is not None and old_category != item.get("category", ""):
+        cleanup_empty_category(old_category, CONTENT_DIR)
+
     return item
 
 
@@ -101,6 +116,8 @@ def api_delete_item(item_id: str):
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    old_category = item.get("category", "")
+
     if item["type"] == "file" and item["filename"]:
         file_path = CONTENT_DIR / item["filename"]
         if file_path.exists():
@@ -108,6 +125,8 @@ def api_delete_item(item_id: str):
 
     if not delete_item(item_id):
         raise HTTPException(status_code=404, detail="Item not found")
+
+    cleanup_empty_category(old_category, CONTENT_DIR)
     return {"status": "ok"}
 
 

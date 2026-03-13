@@ -206,6 +206,116 @@ class TestCategories:
         assert resp.status_code == 404
 
 
+class TestAutoDeleteEmptyCategory:
+    """Auto-delete categories when they have zero live items."""
+
+    def test_delete_last_item_removes_category(self, client):
+        """Deleting the only item in a category auto-deletes the category."""
+        client.post("/api/categories", json={"name": "solo", "color": "#111"})
+        resp = client.post("/api/items", json={
+            "title": "Only Item", "content": "x", "category": "solo",
+        })
+        item_id = resp.json()["id"]
+
+        client.delete(f"/api/items/{item_id}")
+
+        cats = [c["name"] for c in client.get("/api/categories").json()]
+        assert "solo" not in cats
+
+    def test_delete_item_keeps_category_with_remaining(self, client):
+        """Category with remaining live items is NOT deleted."""
+        client.post("/api/categories", json={"name": "shared"})
+        resp1 = client.post("/api/items", json={
+            "title": "Item 1", "content": "a", "category": "shared",
+        })
+        client.post("/api/items", json={
+            "title": "Item 2", "content": "b", "category": "shared",
+        })
+
+        client.delete(f"/api/items/{resp1.json()['id']}")
+
+        cats = [c["name"] for c in client.get("/api/categories").json()]
+        assert "shared" in cats
+
+    def test_change_category_removes_old_empty(self, client):
+        """Changing an item's category auto-deletes the now-empty old category."""
+        client.post("/api/categories", json={"name": "old_cat", "color": "#aaa"})
+        client.post("/api/categories", json={"name": "new_cat", "color": "#bbb"})
+        resp = client.post("/api/items", json={
+            "title": "Mover", "content": "x", "category": "old_cat",
+        })
+        item_id = resp.json()["id"]
+
+        client.put(f"/api/items/{item_id}", json={"category": "new_cat"})
+
+        cats = [c["name"] for c in client.get("/api/categories").json()]
+        assert "old_cat" not in cats
+        assert "new_cat" in cats
+
+    def test_soft_deleted_items_dont_keep_category(self, client):
+        """Category with only soft-deleted items is cleaned up."""
+        client.post("/api/categories", json={"name": "ghosts"})
+        resp1 = client.post("/api/items", json={
+            "title": "Ghost 1", "content": "a", "category": "ghosts",
+        })
+        resp2 = client.post("/api/items", json={
+            "title": "Ghost 2", "content": "b", "category": "ghosts",
+        })
+
+        client.delete(f"/api/items/{resp1.json()['id']}")
+        # After first delete, Ghost 2 still alive — category stays
+        cats = [c["name"] for c in client.get("/api/categories").json()]
+        assert "ghosts" in cats
+
+        client.delete(f"/api/items/{resp2.json()['id']}")
+        # Now both soft-deleted — category should be gone
+        cats = [c["name"] for c in client.get("/api/categories").json()]
+        assert "ghosts" not in cats
+
+    def test_delete_removes_empty_directory(self, client, tmp_content_dir):
+        """Auto-delete also removes the category subdirectory from disk."""
+        cat_dir = tmp_content_dir / "cleanup"
+        cat_dir.mkdir()
+        client.post("/api/categories", json={"name": "cleanup"})
+        resp = client.post("/api/items", json={
+            "title": "Dir Item", "content": "x", "category": "cleanup",
+        })
+        item_id = resp.json()["id"]
+        assert cat_dir.is_dir()
+
+        client.delete(f"/api/items/{item_id}")
+
+        assert not cat_dir.exists()
+
+    def test_directory_kept_if_has_untracked_files(self, client, tmp_content_dir):
+        """Directory is kept if it still contains files on disk."""
+        cat_dir = tmp_content_dir / "hasfiles"
+        cat_dir.mkdir()
+        (cat_dir / "untracked.txt").write_text("not in db")
+        client.post("/api/categories", json={"name": "hasfiles"})
+        resp = client.post("/api/items", json={
+            "title": "Tracked", "content": "x", "category": "hasfiles",
+        })
+        item_id = resp.json()["id"]
+
+        client.delete(f"/api/items/{item_id}")
+
+        # Category removed from DB but directory stays (has untracked file)
+        cats = [c["name"] for c in client.get("/api/categories").json()]
+        assert "hasfiles" not in cats
+        assert cat_dir.is_dir()
+
+    def test_no_cleanup_for_uncategorized(self, client):
+        """Deleting an uncategorized item doesn't cause issues."""
+        resp = client.post("/api/items", json={
+            "title": "No Cat", "content": "x",
+        })
+        item_id = resp.json()["id"]
+
+        resp = client.delete(f"/api/items/{item_id}")
+        assert resp.status_code == 200
+
+
 class TestSync:
     def test_sync_status(self, client):
         resp = client.get("/api/sync/status")

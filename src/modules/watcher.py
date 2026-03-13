@@ -16,7 +16,7 @@ from watchdog.events import FileSystemEventHandler, FileCreatedEvent, FileModifi
 from config import CONTENT_DIR, WATCHER_DEBOUNCE_MS, WATCHER_IGNORE_TTL_S
 from database import (
     create_item, list_items, update_item, delete_item,
-    ensure_category, get_utc_now,
+    ensure_category, cleanup_empty_category, get_utc_now,
 )
 
 
@@ -180,6 +180,7 @@ async def _process_event(event: dict, notify_callback: Optional[Callable] = None
         size = file_path.stat().st_size
 
         if existing:
+            old_category = existing.get("category", "")
             item = update_item(
                 existing["id"],
                 mime_type=mime,
@@ -188,6 +189,9 @@ async def _process_event(event: dict, notify_callback: Optional[Callable] = None
             )
             if notify_callback and item:
                 await notify_callback("item:updated", item)
+            # Clean up old category if item moved to a different one
+            if old_category and old_category != category:
+                cleanup_empty_category(old_category, CONTENT_DIR)
         else:
             if category:
                 ensure_category(category)
@@ -206,9 +210,11 @@ async def _process_event(event: dict, notify_callback: Optional[Callable] = None
     elif event_type == "deleted":
         existing = _find_item_by_filename(rel_path)
         if existing and not existing.get("deleted"):
+            old_category = existing.get("category", "")
             delete_item(existing["id"])
             if notify_callback:
                 await notify_callback("item:deleted", {"id": existing["id"]})
+            cleanup_empty_category(old_category, CONTENT_DIR)
 
 
 async def event_processor(

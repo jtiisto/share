@@ -270,6 +270,39 @@ def ensure_category(name: str):
         create_category(name)
 
 
+def count_category_items(name: str) -> int:
+    """Count live (non-deleted) items in a category."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as cnt FROM items WHERE category = ? AND deleted = 0",
+            (name,)
+        ).fetchone()
+        return row["cnt"]
+
+
+def cleanup_empty_category(name: str, content_dir: Path) -> bool:
+    """Delete a category if it has zero live items. Also removes empty directory.
+    Returns True if the category was deleted."""
+    if not name:
+        return False
+    if not get_category(name):
+        return False
+    if count_category_items(name) > 0:
+        return False
+
+    delete_category(name)
+
+    # Remove directory from disk if it exists and is empty
+    cat_dir = content_dir / name
+    if cat_dir.is_dir():
+        try:
+            cat_dir.rmdir()  # only succeeds if empty
+        except OSError:
+            pass  # directory not empty (untracked files), leave it
+
+    return True
+
+
 # ==================== Sync helpers ====================
 
 def get_items_since(since: str) -> list[dict]:
