@@ -83,3 +83,13 @@ pytest test/
 - WebSocket at `/ws` for real-time updates from file watcher
 - All API routes under `/api/`
 - Visual design matches the wellness project (`../health/wellness`)
+
+## Path-Based Routing
+
+The app uses a `/share` URL prefix for all frontend paths (`BASE_PATH` in `config.py`). Backend routes stay at root (`/api/items`, `/ws`). The `StripPrefixMiddleware` in `server.py` bridges the gap by stripping `/share` from incoming requests.
+
+This enables:
+- **Tailscale `serve --set-path /share`** — Tailscale strips the prefix before forwarding; the middleware is a no-op
+- **Direct access at `localhost:9100/share/`** — The middleware strips the prefix so backend routes match
+
+Frontend files (`index.html`, `manifest.json`, `sw.js`, `store.js`, all component JS) use `/share/` prefixed paths. The server injects `$BASE_PATH$` into `sw.js` at serve time.

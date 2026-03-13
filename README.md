@@ -28,16 +28,88 @@ Cross-device file and note sharing system. Drop files on the server, view them i
 
 **PWA:** Service worker with offline support, web manifest, Android share target
 
-## Quick Start
+## Installation
+
+### Prerequisites
+
+- Python 3.11+
+- pip
+
+### Development Setup
 
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ./bin/server.sh start       # Starts on port 9100
+```
+
+Access the app at `http://localhost:9100/share/`. The `/share` prefix is baked into all frontend paths and handled by the `StripPrefixMiddleware` in the server, so it works with or without a reverse proxy.
+
+### Production Setup with Tailscale
+
+Share and [Wellness](https://github.com/jtiisto/wellness) are designed to run side-by-side on the same Tailscale hostname using path-based routing. Both PWAs get non-overlapping scopes (`/share/` and `/wellness/`) so Chrome on Android treats them as separate installable apps.
+
+**1. Start both servers:**
+
+```bash
+# Share — port 9100
+./bin/server.sh start
+
+# Wellness — port 9000 (separate project)
+```
+
+**2. Configure Tailscale path-based routing:**
+
+```bash
+sudo ./bin/setup-tailscale.sh
+```
+
+This runs:
+
+```bash
+tailscale serve --https 9443 --set-path /share --bg http://localhost:9100
+tailscale serve --https 9443 --set-path /wellness --bg http://localhost:9000
+```
+
+**3. Access the apps:**
+
+```
+https://<tailscale-hostname>:9443/share/
+https://<tailscale-hostname>:9443/wellness/
+```
+
+On Android, "Add to Home Screen" installs each as an independent PWA.
+
+### Without Tailscale
+
+The app works without Tailscale for local development and testing:
+
+```
+http://localhost:9100/share/
+```
+
+The `StripPrefixMiddleware` in `server.py` strips the `/share` prefix from incoming requests so backend routes stay at root (`/api/items`, `/ws`, etc.) while the frontend uses prefixed paths (`/share/api/items`, `/share/ws`). This means the same server works both behind Tailscale (which also strips the prefix) and via direct access.
+
+### systemd Service
+
+For production, install as a systemd service:
+
+```bash
+sudo cp share.service /etc/systemd/system/share.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now share
+```
+
+## Server Control
+
+```bash
+./bin/server.sh start       # Start on port 9100
+./bin/server.sh stop        # Stop the server
+./bin/server.sh restart     # Restart
 ./bin/server.sh status      # Check if running
 ./bin/server.sh logs        # Tail the log
 ```
-
-Open `http://<server-ip>:9100` in a browser. On Android, use "Add to Home Screen" to install as a PWA.
 
 ## Project Structure
 
@@ -83,6 +155,8 @@ plans/
 | POST | `/api/sync/push` | Push items (last-write-wins) |
 | POST | `/api/share` | Android share target |
 | WS | `/ws` | Real-time notifications |
+
+All API endpoints are accessed via the `/share` prefix from the browser (e.g., `/share/api/items`). The server's `StripPrefixMiddleware` strips this prefix, so backend route handlers use unprefixed paths.
 
 ## Testing
 
