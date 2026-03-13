@@ -57,15 +57,17 @@ data/
 plans/
   REQUIREMENTS.md    # Spec — source of truth for features and status
 skills/
-  share-note/        # Claude Code skill (source of truth, deployed to ~/.claude/skills/)
+  personal-share/    # Claude Code skill for sharing (deployed to ~/.claude/skills/)
+  personal-fetch/    # Claude Code skill for fetching (deployed to ~/.claude/skills/)
 test/
   conftest.py        # Test fixtures
   unit/test_items.py # Unit/API tests (66 tests)
   e2e/test_app.py    # Playwright E2E tests (10 tests)
 bin/
   server.sh          # start/stop/restart/status/logs
-  share.sh           # CLI for sharing notes and files
-  deploy-prod.sh     # Deploy to production (syncs skill + symlinks)
+  personal-share.sh  # CLI for sharing notes and files
+  personal-fetch.sh  # CLI for fetching items to local directory
+  deploy-prod.sh     # Deploy to production (syncs skills + symlinks)
 ```
 
 ## Running

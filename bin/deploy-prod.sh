@@ -101,24 +101,43 @@ done
 # Requirements
 copy_file "$PROJECT_ROOT/requirements.txt" "$PROD_DIR/requirements.txt" "requirements.txt"
 
-# Claude Code skill — copy to prod, then symlink to ~/.claude/skills/
-SKILL_SRC_DIR="$PROJECT_ROOT/skills/share-note"
-SKILL_PROD_DIR="$PROD_DIR/skills/share-note"
-SKILL_LINK_DIR="$HOME/.claude/skills/share-note"
-if [ -d "$SKILL_SRC_DIR" ]; then
-    echo "  Syncing share-note skill..."
-    mkdir -p "$SKILL_PROD_DIR"
-    # Copy skill file, replacing dev path with prod path in the content
-    sed "s|$PROJECT_ROOT|$PROD_DIR|g" "$SKILL_SRC_DIR/SKILL.md" > "$SKILL_PROD_DIR/SKILL.md"
-    # Symlink to ~/.claude/skills/ so Claude Code loads it
-    if [ -L "$SKILL_LINK_DIR" ]; then
-        rm "$SKILL_LINK_DIR"
-    elif [ -d "$SKILL_LINK_DIR" ]; then
-        rm -rf "$SKILL_LINK_DIR"
+# Claude Code skills — copy to prod, then symlink to ~/.claude/skills/
+# Clean up old skill name if present
+for old_name in share-note; do
+    old_link="$HOME/.claude/skills/$old_name"
+    if [ -L "$old_link" ] || [ -d "$old_link" ]; then
+        echo "  Removing old skill: $old_name"
+        rm -rf "$old_link"
     fi
-    ln -s "$SKILL_PROD_DIR" "$SKILL_LINK_DIR"
-    echo "  Linked $SKILL_LINK_DIR -> $SKILL_PROD_DIR"
-fi
+    old_prod="$PROD_DIR/skills/$old_name"
+    if [ -d "$old_prod" ]; then
+        rm -rf "$old_prod"
+    fi
+done
+
+deploy_skill() {
+    local skill_name="$1"
+    local src_dir="$PROJECT_ROOT/skills/$skill_name"
+    local prod_dir="$PROD_DIR/skills/$skill_name"
+    local link_dir="$HOME/.claude/skills/$skill_name"
+
+    if [ ! -d "$src_dir" ]; then return; fi
+
+    echo "  Syncing $skill_name skill..."
+    mkdir -p "$prod_dir"
+    sed "s|$PROJECT_ROOT|$PROD_DIR|g" "$src_dir/SKILL.md" > "$prod_dir/SKILL.md"
+
+    if [ -L "$link_dir" ]; then
+        rm "$link_dir"
+    elif [ -d "$link_dir" ]; then
+        rm -rf "$link_dir"
+    fi
+    ln -s "$prod_dir" "$link_dir"
+    echo "  Linked $link_dir -> $prod_dir"
+}
+
+deploy_skill "personal-share"
+deploy_skill "personal-fetch"
 
 echo ""
 

@@ -14,8 +14,9 @@ Built as an installable PWA with a FastAPI backend. No cloud services, no accoun
 - **Offline support** — service worker caches the app; notes created offline sync when back online
 - **Android share target** — share text, URLs, and files from Android's share menu
 - **File watcher** — drop files into `data/content/` on the server and they appear automatically
-- **CLI sharing** — `./bin/share.sh` for quick notes and file uploads from the terminal
-- **Claude Code skill** — `/share-note` skill for sharing from Claude Code sessions
+- **CLI sharing** — `personal-share.sh` for quick notes and file uploads from the terminal
+- **CLI fetching** — `personal-fetch.sh` for downloading items to any machine
+- **Claude Code skills** — `/personal-share` and `/personal-fetch` for sharing and fetching from Claude Code
 
 ## Requirements
 
@@ -53,23 +54,47 @@ The app is available at `http://localhost:9100/share/`.
 
 ```bash
 # Share a URL (title auto-derived from domain)
-./bin/share.sh "https://example.com/article"
+./bin/personal-share.sh "https://example.com/article"
 
 # Share a note with explicit title
-./bin/share.sh -t "Deploy reminder" "remember to deploy on Friday"
+./bin/personal-share.sh -t "Deploy reminder" "remember to deploy on Friday"
 
 # Share with a category
-./bin/share.sh -c "links" "https://docs.python.org/3/"
+./bin/personal-share.sh -c "links" "https://docs.python.org/3/"
 
 # Share a file
-./bin/share.sh /path/to/document.pdf
+./bin/personal-share.sh /path/to/document.pdf
 
 # Share a file with category and title
-./bin/share.sh -c "docs" -t "API Reference" /path/to/api-docs.pdf
+./bin/personal-share.sh -c "docs" -t "API Reference" /path/to/api-docs.pdf
 
 # Pipe support (always creates a note)
-echo "some text" | ./bin/share.sh -t "Piped Note"
+echo "some text" | ./bin/personal-share.sh -t "Piped Note"
 ```
+
+## Fetch from CLI
+
+Download files or export notes from any machine with network access to the server.
+
+```bash
+# List recent items
+./bin/personal-fetch.sh --list
+
+# List only files or notes
+./bin/personal-fetch.sh --list --type file
+./bin/personal-fetch.sh --list --type note
+
+# List items in a category
+./bin/personal-fetch.sh --list --category "docs"
+
+# Fetch by title (partial match, must be unique)
+./bin/personal-fetch.sh "report"
+
+# Fetch to a specific directory
+./bin/personal-fetch.sh -o /tmp "cookie recipe"
+```
+
+Notes are saved as Markdown files. Files are downloaded with their original filename. If a file already exists, a number suffix is added (e.g. `report_1.pdf`).
 
 ## File Watcher
 
@@ -230,7 +255,8 @@ data/
   share.db           # SQLite database (created on first run)
   content/           # Watched directory (subdirs = categories)
 skills/
-  share-note/        # Claude Code skill definition
+  personal-share/    # Claude Code skill for sharing
+  personal-fetch/    # Claude Code skill for fetching
 plans/
   REQUIREMENTS.md    # Feature spec and status
 test/
@@ -238,6 +264,7 @@ test/
   e2e/               # Playwright browser tests
 bin/
   server.sh          # Server control (start/stop/restart/status/logs)
-  share.sh           # CLI for sharing notes and files
+  personal-share.sh  # CLI for sharing notes and files
+  personal-fetch.sh  # CLI for fetching items to local directory
   deploy-prod.sh     # Production deployment
 ```
