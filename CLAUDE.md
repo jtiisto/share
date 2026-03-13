@@ -29,7 +29,8 @@ When proposing new work, always update the requirements file first and confirm w
 - **marked** for client-side Markdown rendering
 
 ### Testing
-- **pytest** (unit + integration)
+- **pytest** (unit — 66 tests, 95% coverage)
+- **Playwright** (E2E browser tests — 10 tests)
 - **httpx** for async test client
 
 ## Project Structure
@@ -55,11 +56,16 @@ data/
   content/           # Watched directory (subdirs = categories)
 plans/
   REQUIREMENTS.md    # Spec — source of truth for features and status
+skills/
+  share-note/        # Claude Code skill (source of truth, deployed to ~/.claude/skills/)
 test/
   conftest.py        # Test fixtures
-  unit/test_items.py # API tests
+  unit/test_items.py # Unit/API tests (66 tests)
+  e2e/test_app.py    # Playwright E2E tests (10 tests)
 bin/
   server.sh          # start/stop/restart/status/logs
+  share.sh           # CLI for sharing notes and files
+  deploy-prod.sh     # Deploy to production (syncs skill + symlinks)
 ```
 
 ## Running
@@ -79,10 +85,23 @@ pytest test/
 - Port 9100 (wellness uses 9000)
 - Database at `data/share.db`
 - Content files at `data/content/` — subdirectories map to categories
+- Empty categories are auto-deleted when their last live item is removed or recategorized
 - Last-write-wins conflict resolution
 - WebSocket at `/ws` for real-time updates from file watcher
 - All API routes under `/api/`
 - Visual design matches the wellness project (`../health/wellness`)
+
+## Deployment
+
+```bash
+./bin/deploy-prod.sh /path/to/production/directory
+```
+
+The deploy script:
+- Syncs `src/`, `public/`, `bin/` (excluding deploy script itself), and `requirements.txt`
+- Copies the `share-note` skill with paths rewritten to the production directory
+- Symlinks `~/.claude/skills/share-note` to the production copy
+- Preserves `data/` (database and content files are never overwritten)
 
 ## Path-Based Routing
 

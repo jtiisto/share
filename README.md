@@ -1,139 +1,188 @@
 # Personal Share
 
-Cross-device file and note sharing system. Drop files on the server, view them instantly on your phone or laptop.
+Cross-device file and note sharing system. Drop files on your server, view them instantly on your phone or laptop.
 
-## What It Does
+Built as an installable PWA with a FastAPI backend. No cloud services, no accounts — runs on your own hardware.
 
-- **Files** — Copy a file into `data/content/` on the server and it appears on all connected devices within a second via WebSocket.
-- **Notes** — Persistent clipboard across devices. Create, edit, and sync short text snippets.
-- **Categories** — Organize items with tags. Subdirectories in `data/content/` map to categories automatically.
-- **Pinning** — Pin important items for quick access.
-- **Offline** — Works offline with dirty tracking and background sync on reconnect.
-- **Android Share Target** — Share text, URLs, or files from any Android app directly into the system.
-- **Content Viewing** — Render HTML and Markdown files directly in the app.
+## Features
 
-## Devices
+- **Notes** — cross-device persistent clipboard for URLs, commands, text snippets
+- **Files** — upload/download any file type, with in-app rendering for HTML and Markdown
+- **Categories** — organize items into categories; empty categories are auto-cleaned
+- **Pinning** — pin items for quick access
+- **Real-time sync** — WebSocket pushes changes to all connected clients instantly
+- **Offline support** — service worker caches the app; notes created offline sync when back online
+- **Android share target** — share text, URLs, and files from Android's share menu
+- **File watcher** — drop files into `data/content/` on the server and they appear automatically
+- **CLI sharing** — `./bin/share.sh` for quick notes and file uploads from the terminal
+- **Claude Code skill** — `/share-note` skill for sharing from Claude Code sessions
 
-| Device  | Interface | Role |
-|---------|-----------|------|
-| Server  | File drop / API / Web UI | Primary hub, file watcher auto-syncs |
-| Android | Installable PWA | View, share, upload/download |
-| Laptop  | Web client | View, upload/download |
+## Requirements
 
-## Tech Stack
-
-**Backend:** FastAPI, Uvicorn, SQLite, watchdog (filesystem monitoring), mistune (Markdown)
-
-**Frontend:** Preact + HTM (ESM from CDN, no build step), Preact Signals, LocalForage, marked.js
-
-**PWA:** Service worker with offline support, web manifest, Android share target
+- Python 3.11+
+- A modern browser (Chrome/Edge recommended for PWA install)
 
 ## Installation
 
-### Prerequisites
-
-- Python 3.11+
-- pip
-
-### Development Setup
-
 ```bash
+git clone <repo-url> share
+cd share
+
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-./bin/server.sh start       # Starts on port 9100
 ```
 
-Access the app at `http://localhost:9100/share/`. The `/share` prefix is baked into all frontend paths and handled by the `StripPrefixMiddleware` in the server, so it works with or without a reverse proxy.
-
-### Production Setup with Tailscale
-
-Share and [Wellness](https://github.com/jtiisto/wellness) are designed to run side-by-side on the same Tailscale hostname using path-based routing. Both PWAs get non-overlapping scopes (`/share/` and `/wellness/`) so Chrome on Android treats them as separate installable apps.
-
-**1. Start both servers:**
+## Running
 
 ```bash
-# Share — port 9100
+# Start the server (port 9100, runs in background)
 ./bin/server.sh start
 
-# Wellness — port 9000 (separate project)
+# Other commands
+./bin/server.sh stop
+./bin/server.sh restart
+./bin/server.sh status
+./bin/server.sh logs      # show recent logs
+./bin/server.sh follow    # tail -f the log
 ```
 
-**2. Configure Tailscale path-based routing:**
+The app is available at `http://localhost:9100/share/`.
+
+## Quick Share from CLI
 
 ```bash
-sudo ./bin/setup-tailscale.sh
+# Share a URL (title auto-derived from domain)
+./bin/share.sh "https://example.com/article"
+
+# Share a note with explicit title
+./bin/share.sh -t "Deploy reminder" "remember to deploy on Friday"
+
+# Share with a category
+./bin/share.sh -c "links" "https://docs.python.org/3/"
+
+# Share a file
+./bin/share.sh /path/to/document.pdf
+
+# Share a file with category and title
+./bin/share.sh -c "docs" -t "API Reference" /path/to/api-docs.pdf
+
+# Pipe support (always creates a note)
+echo "some text" | ./bin/share.sh -t "Piped Note"
 ```
 
-This runs:
+## File Watcher
+
+The server monitors `data/content/` for filesystem changes. Subdirectories map to categories:
+
+```
+data/content/
+  recipes/
+    cookies.md      -> category: recipes
+    bread.html      -> category: recipes
+  photo.jpg         -> no category
+```
+
+Drop files into the directory (or a subdirectory) and they appear in the app automatically. The watcher debounces events (300ms) and ignores files created by the API to prevent loops.
+
+A special `data/content/_inbox.txt` file is also watched — each line becomes a note, and the file is truncated after processing.
+
+## Installing as a PWA
+
+1. Open the app in Chrome/Edge on your device
+2. Tap "Install" or "Add to Home Screen"
+3. The app runs standalone with offline support
+
+On Android, the installed PWA registers as a share target — you can share text, URLs, and files from any app directly into Personal Share.
+
+## Remote Access with Tailscale
+
+To access the app from your phone and laptop outside your local network, use [Tailscale](https://tailscale.com/) with HTTPS serving.
+
+### Setup
+
+1. Install Tailscale on your server and all client devices
+2. Configure HTTPS serving with a path prefix:
 
 ```bash
-tailscale serve --https 9443 --set-path /share --bg http://localhost:9100
-tailscale serve --https 9443 --set-path /wellness --bg http://localhost:9000
+sudo tailscale serve --https 9443 --set-path /share --bg http://localhost:9100
 ```
 
-**3. Access the apps:**
+3. Verify:
 
-```
-https://<tailscale-hostname>:9443/share/
-https://<tailscale-hostname>:9443/wellness/
+```bash
+sudo tailscale serve status
 ```
 
-On Android, "Add to Home Screen" installs each as an independent PWA.
+4. Access the app at `https://<your-tailscale-hostname>:9443/share/`
+
+The app's path-based routing handles this automatically. Tailscale strips the `/share` prefix before forwarding, and the server's `StripPrefixMiddleware` handles direct access at `localhost:9100/share/`. No additional configuration needed.
+
+### Multiple apps on one port
+
+You can serve multiple apps on the same Tailscale HTTPS port using different path prefixes:
+
+```bash
+sudo tailscale serve --https 9443 --set-path /share --bg http://localhost:9100
+sudo tailscale serve --https 9443 --set-path /other-app --bg http://localhost:9200
+```
+
+Each app gets its own PWA scope, so Chrome on Android treats them as separate installable apps.
 
 ### Without Tailscale
 
-The app works without Tailscale for local development and testing:
+The app works fine without Tailscale for local network use:
 
 ```
 http://localhost:9100/share/
+http://<your-server-ip>:9100/share/
 ```
 
-The `StripPrefixMiddleware` in `server.py` strips the `/share` prefix from incoming requests so backend routes stay at root (`/api/items`, `/ws`, etc.) while the frontend uses prefixed paths (`/share/api/items`, `/share/ws`). This means the same server works both behind Tailscale (which also strips the prefix) and via direct access.
+## Deployment
 
-### systemd Service
-
-For production, install as a systemd service:
+Deploy to a production directory (separate from development):
 
 ```bash
-sudo cp share.service /etc/systemd/system/share.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now share
+./bin/deploy-prod.sh /path/to/production/share
 ```
 
-## Server Control
+This syncs application files without touching `data/` — your database and content files are preserved. It also deploys the Claude Code skill with paths rewritten for the production location.
+
+First-time production setup:
 
 ```bash
-./bin/server.sh start       # Start on port 9100
-./bin/server.sh stop        # Stop the server
-./bin/server.sh restart     # Restart
-./bin/server.sh status      # Check if running
-./bin/server.sh logs        # Tail the log
+cd /path/to/production/share
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+./bin/server.sh start
 ```
 
-## Project Structure
+## Testing
 
+```bash
+# All tests (unit + E2E)
+pytest test/
+
+# Unit tests only (66 tests, 95% coverage)
+pytest test/unit/
+
+# E2E browser tests (requires: pip install pytest-playwright && playwright install chromium)
+pytest test/e2e/
+
+# With coverage report
+pytest test/ --cov=src --cov-report=term-missing
 ```
-src/
-  server.py          # FastAPI app, WebSocket, static serving
-  config.py          # Paths, constants
-  database.py        # SQLite schema and CRUD
-  modules/
-    items.py         # API routes (items, categories, sync, share)
-    watcher.py       # Filesystem watcher with 300ms debounce
-public/              # Frontend SPA (served as static files)
-data/
-  content/           # Watched directory — subdirs = categories
-  share.db           # SQLite database
-test/
-  unit/              # 59 unit tests, 93% coverage
-  e2e/               # Playwright browser tests
-bin/
-  server.sh          # start/stop/restart/status/logs
-  deploy-prod.sh     # Safe deployment (preserves data)
-plans/
-  REQUIREMENTS.md    # Feature spec — source of truth
+
+### Test mode
+
+Run an isolated instance with seeded sample data for manual testing:
+
+```bash
+python3 src/server.py --test
 ```
+
+This starts on port 9101 with a separate database and content directory. Production data is never touched.
 
 ## API
 
@@ -143,37 +192,52 @@ plans/
 | POST | `/api/items` | Create note |
 | GET | `/api/items/{id}` | Get item |
 | PUT | `/api/items/{id}` | Update item |
-| DELETE | `/api/items/{id}` | Delete item |
+| DELETE | `/api/items/{id}` | Delete item (auto-cleans empty category) |
 | PATCH | `/api/items/{id}/pin` | Toggle pin |
 | POST | `/api/items/upload` | Upload file (multipart) |
 | GET | `/api/items/{id}/download` | Download file |
 | GET | `/api/items/{id}/render` | Render HTML/MD content |
-| GET/POST | `/api/categories` | List/create categories |
-| PUT/DELETE | `/api/categories/{name}` | Update/delete category |
+| GET | `/api/categories` | List categories |
+| POST | `/api/categories` | Create category |
+| PUT | `/api/categories/{name}` | Update/rename category |
+| DELETE | `/api/categories/{name}` | Delete category |
 | GET | `/api/sync/status` | Last sync timestamp |
 | POST | `/api/sync/pull` | Pull items since timestamp |
 | POST | `/api/sync/push` | Push items (last-write-wins) |
-| POST | `/api/share` | Android share target |
+| POST | `/api/share` | Share target endpoint (multipart) |
 | WS | `/ws` | Real-time notifications |
 
-All API endpoints are accessed via the `/share` prefix from the browser (e.g., `/share/api/items`). The server's `StripPrefixMiddleware` strips this prefix, so backend route handlers use unprefixed paths.
+All endpoints are accessed via the `/share` prefix from the browser (e.g., `/share/api/items`). The server middleware strips this prefix so route handlers use unprefixed paths.
 
-## Testing
+## Tech Stack
 
-```bash
-pytest test/unit/                # Unit tests
-pytest test/e2e/                 # E2E browser tests (requires Playwright)
-pytest test/unit/ --cov=src      # With coverage report
+- **Backend:** FastAPI, Uvicorn, SQLite, watchdog, mistune
+- **Frontend:** Preact + HTM (ESM from CDN, no build step), Preact Signals, LocalForage, marked.js
+- **Testing:** pytest (unit), Playwright (E2E), httpx
+
+## Project Structure
+
 ```
-
-Git hooks run tests automatically:
-- **Pre-commit:** Unit tests with coverage report
-- **Pre-push:** Full suite with 90% coverage threshold
-
-## Deployment
-
-```bash
-./bin/deploy-prod.sh /path/to/production
+src/
+  server.py          # FastAPI app, WebSocket, static serving
+  config.py          # Paths, constants
+  database.py        # SQLite schema, CRUD operations
+  modules/
+    items.py         # API routes: items, categories, sync, share
+    watcher.py       # Filesystem watcher with debounce
+public/              # Frontend SPA (served as static files)
+data/
+  share.db           # SQLite database (created on first run)
+  content/           # Watched directory (subdirs = categories)
+skills/
+  share-note/        # Claude Code skill definition
+plans/
+  REQUIREMENTS.md    # Feature spec and status
+test/
+  unit/              # Unit/API tests
+  e2e/               # Playwright browser tests
+bin/
+  server.sh          # Server control (start/stop/restart/status/logs)
+  share.sh           # CLI for sharing notes and files
+  deploy-prod.sh     # Production deployment
 ```
-
-The deploy script copies application files while preserving existing `data/content/` and `*.db` files. Safe to run against both new and existing production directories.
