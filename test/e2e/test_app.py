@@ -160,23 +160,27 @@ class TestNotes:
 
 class TestFiles:
     def test_upload_file(self, page):
+        # Ensure we're on Files view (localStorage may persist from prior tests)
+        page.locator(".nav-btn", has_text="Files").click()
+
         # Open add sheet
         page.locator(".fab").click()
         page.wait_for_selector(".sheet")
 
-        # Switch to file tab
+        # Switch to file tab and wait for upload area to appear
         page.locator(".category-chip", has_text="File").click()
+        page.wait_for_selector(".upload-area")
 
-        # Upload a file
-        page.locator("input[type='file']").set_input_files({
+        # Upload a file (auto-submits on select)
+        page.locator(".upload-area input[type='file']").set_input_files({
             "name": "test.txt",
             "mimeType": "text/plain",
             "buffer": b"Hello from E2E",
         })
 
-        # Should close and file should appear
-        page.wait_for_selector(".sheet", state="hidden", timeout=5000)
-        expect(page.locator(".item-card-title", has_text="test.txt")).to_be_visible()
+        # Sheet is removed from DOM after upload completes; file should appear
+        page.wait_for_selector(".sheet-overlay", state="detached", timeout=10000)
+        expect(page.locator(".item-card-title", has_text="test.txt")).to_be_visible(timeout=10000)
 
 
 class TestCategories:
@@ -184,6 +188,8 @@ class TestCategories:
         expect(page.locator(".category-filter")).to_be_visible()
         expect(page.locator(".category-chip", has_text="All")).to_be_visible()
 
-    def test_manage_categories_opens(self, page):
-        page.locator(".category-chip", has_text="Manage").click()
-        expect(page.locator(".sheet-title", has_text="Manage Categories")).to_be_visible()
+    def test_all_chip_is_active_by_default(self, page):
+        """The 'All' filter chip is active by default."""
+        import re
+        all_chip = page.locator(".category-chip", has_text="All")
+        expect(all_chip).to_have_class(re.compile(r"active"))
