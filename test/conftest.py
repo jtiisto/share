@@ -40,7 +40,7 @@ def test_app(tmp_path, tmp_db, tmp_content_dir, monkeypatch):
     js_dir.mkdir()
     (js_dir / "app.js").write_text("console.log('test');")
     (public_dir / "manifest.json").write_text('{"name":"Share","start_url":"/","display":"standalone"}')
-    (public_dir / "sw.js").write_text("// sw stub $SERVER_VERSION$")
+    (public_dir / "sw.js").write_text("// sw stub $SERVER_VERSION$ $BASE_PATH$")
     icons_dir = public_dir / "icons"
     icons_dir.mkdir()
 

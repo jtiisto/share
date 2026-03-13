@@ -2,6 +2,17 @@
 
 Cross-device file and note sharing system — PWA with FastAPI backend.
 
+## Development Process
+
+**Spec-driven development.** All work follows this flow:
+
+1. **Spec first** — Write or update requirements in `plans/REQUIREMENTS.md` before any code changes. New features, changes, and bug fixes all start as spec updates.
+2. **Separation of status** — Requirements are clearly marked as `[DONE]` (implemented) or unmarked (pending). This is the source of truth for what exists vs. what's planned.
+3. **Implement** — Build against the spec. Tests are written alongside code.
+4. **Mark done** — Update `plans/REQUIREMENTS.md` to reflect the new implementation status.
+
+When proposing new work, always update the requirements file first and confirm with the user before implementing.
+
 ## Tech Stack
 
 ### Backend
@@ -42,6 +53,8 @@ public/
     items/           # View components
 data/
   content/           # Watched directory (subdirs = categories)
+plans/
+  REQUIREMENTS.md    # Spec — source of truth for features and status
 test/
   conftest.py        # Test fixtures
   unit/test_items.py # API tests
@@ -69,3 +82,4 @@ pytest test/
 - Last-write-wins conflict resolution
 - WebSocket at `/ws` for real-time updates from file watcher
 - All API routes under `/api/`
+- Visual design matches the wellness project (`../health/wellness`)

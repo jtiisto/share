@@ -1,11 +1,10 @@
 /**
- * ItemsView — File list with category filter + pinned section
+ * ItemsView — File list with category filter + pinned section + category management
  */
 import { h } from 'preact';
-import { useState, useEffect } from 'preact/hooks';
-import { signal } from '@preact/signals';
+import { useEffect } from 'preact/hooks';
 import htm from 'htm';
-import { items, categories, loadItems, loadCategories, selectedCategory } from '../store.js';
+import { items, categories, loadCategories, selectedCategory } from '../store.js';
 import { ItemCard } from './ItemCard.js';
 
 const html = htm.bind(h);
@@ -29,7 +28,9 @@ export function ItemsView() {
                 ${categories.value.map(c => html`
                     <button key=${c.name}
                         class="category-chip ${cat === c.name ? 'active' : ''}"
+                        style=${c.color ? `--chip-color: ${c.color}` : ''}
                         onClick=${() => { selectedCategory.value = c.name; }}>
+                        ${c.color ? html`<span class="cat-color-dot" style="background:${c.color}; width:8px; height:8px; display:inline-block; margin-right:4px; vertical-align:middle;"></span>` : null}
                         ${c.name}
                     </button>
                 `)}

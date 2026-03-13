@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
-from config import PUBLIC_DIR, CONTENT_DIR
+from config import PUBLIC_DIR, CONTENT_DIR, BASE_PATH
 from database import init_database
 
 
@@ -83,9 +83,9 @@ async def lifespan(app):
             pass
 
 
-app = FastAPI(title="Personal Share", lifespan=lifespan)
+_inner_app = FastAPI(title="Personal Share", lifespan=lifespan)
 
-app.add_middleware(
+_inner_app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
@@ -94,15 +94,43 @@ app.add_middleware(
 )
 
 
+class StripPrefixMiddleware:
+    """ASGI middleware that strips BASE_PATH prefix from incoming requests.
+
+    Frontend assets use absolute paths with the prefix (e.g. /share/api/items)
+    because that's the URL the browser sees via Tailscale. This middleware
+    strips the prefix so backend routes can stay at root (e.g. /api/items).
+
+    This serves two purposes:
+    1. Direct access (localhost:9100/share/...) works for local dev/testing
+       without needing Tailscale.
+    2. Tailscale `serve --set-path /share` already strips the prefix, so
+       requests arriving without it pass through unchanged.
+    """
+    def __init__(self, app, prefix: str):
+        self.app = app
+        self.prefix = prefix
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            path = scope.get("path", "")
+            if path.startswith(self.prefix):
+                scope = dict(scope, path=path[len(self.prefix):] or "/")
+        await self.app(scope, receive, send)
+
+
+app = StripPrefixMiddleware(_inner_app, BASE_PATH)
+
+
 # ==================== API Routes ====================
 
 from modules.items import router as items_router
-app.include_router(items_router, prefix="/api")
+_inner_app.include_router(items_router, prefix="/api")
 
 
 # ==================== WebSocket ====================
 
-@app.websocket("/ws")
+@_inner_app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await manager.connect(ws)
     try:
@@ -117,16 +145,20 @@ async def websocket_endpoint(ws: WebSocket):
 
 
 # ==================== Static File Serving ====================
+# Backend routes stay at root. The StripPrefixMiddleware handles stripping
+# /share from incoming requests, so the app works both directly and behind
+# Tailscale serve --set-path.
 
-@app.get("/")
+
+@_inner_app.get("/")
 def serve_root():
     index_path = PUBLIC_DIR / "index.html"
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="index.html not found")
 
     html = index_path.read_text()
-    html = html.replace('href="/styles.css"', f'href="/styles.css?v={SERVER_VERSION}"')
-    html = html.replace('src="/js/app.js"', f'src="/js/app.js?v={SERVER_VERSION}"')
+    html = html.replace(f'href="{BASE_PATH}/styles.css"', f'href="{BASE_PATH}/styles.css?v={SERVER_VERSION}"')
+    html = html.replace(f'src="{BASE_PATH}/js/app.js"', f'src="{BASE_PATH}/js/app.js?v={SERVER_VERSION}"')
 
     return HTMLResponse(
         content=html,
@@ -134,7 +166,7 @@ def serve_root():
     )
 
 
-@app.get("/styles.css")
+@_inner_app.get("/styles.css")
 def serve_css():
     css_path = PUBLIC_DIR / "styles.css"
     if css_path.exists():
@@ -146,7 +178,7 @@ def serve_css():
     raise HTTPException(status_code=404, detail="styles.css not found")
 
 
-@app.get("/js/{file_path:path}")
+@_inner_app.get("/js/{file_path:path}")
 def serve_js(file_path: str):
     js_path = PUBLIC_DIR / "js" / file_path
     if js_path.exists() and js_path.is_file():
@@ -158,7 +190,7 @@ def serve_js(file_path: str):
     raise HTTPException(status_code=404, detail=f"JS file not found: {file_path}")
 
 
-@app.get("/manifest.json")
+@_inner_app.get("/manifest.json")
 def serve_manifest():
     manifest_path = PUBLIC_DIR / "manifest.json"
     if manifest_path.exists():
@@ -170,7 +202,7 @@ def serve_manifest():
     raise HTTPException(status_code=404, detail="manifest.json not found")
 
 
-@app.get("/sw.js")
+@_inner_app.get("/sw.js")
 def serve_sw():
     sw_path = PUBLIC_DIR / "sw.js"
     if not sw_path.exists():
@@ -178,18 +210,19 @@ def serve_sw():
 
     content = sw_path.read_text()
     content = content.replace("$SERVER_VERSION$", SERVER_VERSION)
+    content = content.replace("$BASE_PATH$", BASE_PATH)
 
     return Response(
         content=content,
         media_type="application/javascript",
         headers={
             "Cache-Control": "no-cache, must-revalidate",
-            "Service-Worker-Allowed": "/"
+            "Service-Worker-Allowed": f"{BASE_PATH}/"
         }
     )
 
 
-@app.get("/icons/{file_path:path}")
+@_inner_app.get("/icons/{file_path:path}")
 def serve_icons(file_path: str):
     icon_path = PUBLIC_DIR / "icons" / file_path
     if icon_path.exists() and icon_path.is_file():
@@ -228,9 +261,15 @@ if __name__ == "__main__":
         config.CONTENT_DIR = test_content
         CONTENT_DIR = test_content  # Update local import
 
-        # Also patch the items module
+        # Also patch modules that captured CONTENT_DIR at import time
         import modules.items as items_mod
         items_mod.CONTENT_DIR = test_content
+
+        try:
+            import modules.watcher as watcher_mod
+            watcher_mod.CONTENT_DIR = test_content
+        except ImportError:
+            pass  # watchdog not installed
 
         database.set_db_path(test_db)
 

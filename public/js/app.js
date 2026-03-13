@@ -4,7 +4,7 @@
 import { h, render } from 'preact';
 import { signal, effect } from '@preact/signals';
 import htm from 'htm';
-import { initStore, syncStatus, isSyncing, requestSync } from './store.js';
+import { initStore, syncStatus, isSyncing, dirtyCount, requestSync, viewingItem } from './store.js';
 import { ItemsView } from './items/ItemsView.js';
 import { NotesView } from './items/NotesView.js';
 import { AddSheet } from './items/AddSheet.js';
@@ -17,7 +17,6 @@ const html = htm.bind(h);
 
 const activeView = signal(localStorage.getItem('share_active_view') || 'files');
 const showAddSheet = signal(false);
-export const viewingItem = signal(null);
 
 // ==================== Icons ====================
 
@@ -46,11 +45,23 @@ function selectView(id) {
 function SyncIndicator() {
     const status = syncStatus.value;
     const syncing = isSyncing.value;
+    const dirty = dirtyCount.value;
     const cls = syncing ? 'syncing' : status;
 
+    const titles = {
+        green: 'Synced',
+        red: 'Sync error — tap to retry',
+        gray: 'Offline',
+        dirty: `${dirty} pending change${dirty !== 1 ? 's' : ''}`,
+        syncing: 'Syncing...',
+    };
+
     return html`
-        <button class="icon-btn" onClick=${requestSync} title="Sync status">
+        <button class="sync-btn" onClick=${requestSync} title=${titles[syncing ? 'syncing' : status]}>
             <span class="sync-dot ${cls}"></span>
+            ${status === 'dirty' && dirty > 0 && html`
+                <span class="sync-badge">${dirty}</span>
+            `}
         </button>
     `;
 }

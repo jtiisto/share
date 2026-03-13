@@ -1,20 +1,22 @@
 {
+    "id": "/share",
     "name": "Personal Share",
     "short_name": "Share",
     "description": "Cross-device file and note sharing",
-    "start_url": "/",
+    "start_url": "/share/",
+    "scope": "/share/",
     "display": "standalone",
     "background_color": "#1a1a2e",
     "theme_color": "#1a1a2e",
     "orientation": "portrait",
     "icons": [
-        { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-        { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-        { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-        { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+        { "src": "/share/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+        { "src": "/share/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+        { "src": "/share/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+        { "src": "/share/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
     ],
     "share_target": {
-        "action": "/",
+        "action": "/share/",
         "method": "GET",
         "params": {
             "title": "title",

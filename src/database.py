@@ -215,6 +215,56 @@ def create_category(name: str, color: Optional[str] = None, sort_order: int = 0)
     return {"name": name, "color": color, "sort_order": sort_order}
 
 
+def update_category(name: str, **fields) -> Optional[dict]:
+    allowed = {"color", "sort_order"}
+    updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+    if not updates:
+        return get_category(name)
+
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM categories WHERE name = ?", (name,)).fetchone()
+        if not row:
+            return None
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        params = list(updates.values()) + [name]
+        conn.execute(f"UPDATE categories SET {set_clause} WHERE name = ?", params)
+        conn.commit()
+    return get_category(name)
+
+
+def rename_category(old_name: str, new_name: str) -> Optional[dict]:
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM categories WHERE name = ?", (old_name,)).fetchone()
+        if not row:
+            return None
+        # Update items that reference this category
+        conn.execute("UPDATE items SET category = ? WHERE category = ?", (new_name, old_name))
+        # Update the category itself
+        conn.execute(
+            "INSERT OR REPLACE INTO categories (name, color, sort_order) VALUES (?, ?, ?)",
+            (new_name, row["color"], row["sort_order"])
+        )
+        if old_name != new_name:
+            conn.execute("DELETE FROM categories WHERE name = ?", (old_name,))
+        conn.commit()
+    return get_category(new_name)
+
+
+def delete_category(name: str) -> bool:
+    with get_db() as conn:
+        # Clear category from items (don't delete the items)
+        conn.execute("UPDATE items SET category = '' WHERE category = ?", (name,))
+        result = conn.execute("DELETE FROM categories WHERE name = ?", (name,))
+        conn.commit()
+        return result.rowcount > 0
+
+
+def get_category(name: str) -> Optional[dict]:
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM categories WHERE name = ?", (name,)).fetchone()
+        return dict(row) if row else None
+
+
 def ensure_category(name: str):
     if name:
         create_category(name)

@@ -10,6 +10,7 @@ DB_PATH = Path(os.environ.get("SHARE_DB_PATH", str(DATA_DIR / "share.db")))
 # Server
 DEFAULT_PORT = 9100
 TEST_PORT = 9101
+BASE_PATH = "/share"  # URL prefix for reverse proxy path-based routing
 
 # Watcher
 WATCHER_DEBOUNCE_MS = 300

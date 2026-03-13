@@ -13,7 +13,8 @@ from pydantic import BaseModel
 from config import CONTENT_DIR
 from database import (
     create_item, get_item, list_items, update_item, delete_item, toggle_pin,
-    list_categories, create_category, ensure_category,
+    list_categories, create_category, update_category, rename_category,
+    delete_category as db_delete_category, get_category, ensure_category,
     get_items_since, upsert_item_from_sync, get_meta, set_meta,
     get_utc_now, generate_id,
 )
@@ -38,6 +39,11 @@ class CategoryCreate(BaseModel):
     name: str
     color: Optional[str] = None
     sort_order: int = 0
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    sort_order: Optional[int] = None
 
 class SyncPullRequest(BaseModel):
     since: str
@@ -235,6 +241,41 @@ def api_list_categories():
 @router.post("/categories")
 def api_create_category(cat: CategoryCreate):
     return create_category(cat.name, cat.color, cat.sort_order)
+
+
+@router.put("/categories/{cat_name}")
+def api_update_category(cat_name: str, cat: CategoryUpdate):
+    existing = get_category(cat_name)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    # Handle rename
+    if cat.name and cat.name != cat_name:
+        result = rename_category(cat_name, cat.name)
+        if not result:
+            raise HTTPException(status_code=404, detail="Category not found")
+        cat_name = cat.name
+
+    # Handle color/sort_order update
+    updates = {}
+    if cat.color is not None:
+        updates["color"] = cat.color
+    if cat.sort_order is not None:
+        updates["sort_order"] = cat.sort_order
+    if updates:
+        result = update_category(cat_name, **updates)
+        if not result:
+            raise HTTPException(status_code=404, detail="Category not found")
+        return result
+
+    return get_category(cat_name)
+
+
+@router.delete("/categories/{cat_name}")
+def api_delete_category(cat_name: str):
+    if not db_delete_category(cat_name):
+        raise HTTPException(status_code=404, detail="Category not found")
+    return {"status": "ok"}
 
 
 # ==================== Sync ====================

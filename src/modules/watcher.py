@@ -107,6 +107,53 @@ def _find_item_by_filename(rel_path: str) -> Optional[dict]:
     return None
 
 
+INBOX_FILENAME = "_inbox.txt"
+
+
+async def _process_inbox(file_path: Path, notify_callback: Optional[Callable] = None):
+    """Process _inbox.txt: each block (separated by blank lines) becomes a note.
+    Single lines become notes with auto-derived titles. File is truncated after."""
+    try:
+        text = file_path.read_text().strip()
+        if not text:
+            return
+
+        # Split into blocks by blank lines
+        blocks = [b.strip() for b in text.split("\n\n") if b.strip()]
+
+        for block in blocks:
+            lines = block.split("\n")
+            if len(lines) == 1:
+                content = lines[0]
+                # Auto-derive title: domain for URLs, first 50 chars otherwise
+                if content.startswith("http://") or content.startswith("https://"):
+                    try:
+                        from urllib.parse import urlparse
+                        title = urlparse(content).netloc
+                    except Exception:
+                        title = content[:50]
+                else:
+                    title = content[:50]
+            else:
+                title = lines[0]
+                content = "\n".join(lines[1:]).strip()
+
+            item = create_item(
+                item_type="note",
+                title=title,
+                content=content,
+                source="watcher",
+            )
+            if notify_callback and item:
+                await notify_callback("item:created", item)
+
+        # Truncate the inbox file
+        file_path.write_text("")
+        ignore_set.add(str(file_path))
+    except Exception as e:
+        print(f"Inbox processing error: {e}")
+
+
 async def _process_event(event: dict, notify_callback: Optional[Callable] = None):
     """Process a single filesystem event."""
     file_path = Path(event["path"])
@@ -115,6 +162,11 @@ async def _process_event(event: dict, notify_callback: Optional[Callable] = None
     try:
         rel_path = str(file_path.relative_to(CONTENT_DIR))
     except ValueError:
+        return
+
+    # Special handling for inbox file
+    if file_path.name == INBOX_FILENAME and event_type in ("created", "modified"):
+        await _process_inbox(file_path, notify_callback)
         return
 
     category = _path_to_category(file_path)

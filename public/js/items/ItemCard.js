@@ -3,8 +3,7 @@
  */
 import { h } from 'preact';
 import htm from 'htm';
-import { togglePin, deleteItem, formatSize, formatTime, showNotification } from '../store.js';
-import { viewingItem } from '../app.js';
+import { togglePin, deleteItem, formatSize, formatTime, showNotification, viewingItem } from '../store.js';
 
 const html = htm.bind(h);
 
@@ -40,14 +39,14 @@ export function ItemCard({ item }) {
 
     const onDownload = (e) => {
         e.stopPropagation();
-        window.open(`/api/items/${item.id}/download`, '_blank');
+        window.open(`/share/api/items/${item.id}/download`, '_blank');
     };
 
     const onClick = () => {
         if (canRender(item)) {
             viewingItem.value = item;
         } else if (isFile) {
-            window.open(`/api/items/${item.id}/download`, '_blank');
+            window.open(`/share/api/items/${item.id}/download`, '_blank');
         }
     };
 
@@ -62,34 +61,35 @@ export function ItemCard({ item }) {
                 <div class="item-card-preview">${item.content.slice(0, 200)}</div>
             `}
 
-            <div class="item-card-meta">
-                ${item.category && html`<span>${item.category}</span>`}
-                ${isFile && html`<span class="file-size">${formatSize(item.size_bytes)}</span>`}
-                <span>${formatTime(item.updated_at)}</span>
-            </div>
-
-            <div class="item-card-actions" style="position:absolute; top:8px; right:8px; display:flex; gap:2px;">
-                <button class="icon-btn" onClick=${onPin} title=${isPinned ? 'Unpin' : 'Pin'}
-                    style="width:32px; height:32px; color: ${isPinned ? 'var(--accent-warning)' : 'var(--text-muted)'}">
-                    <svg viewBox="0 0 24 24" fill="${isPinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" width="16" height="16">
-                        <path d="M12 2L9 9H2l5.5 4.5L5 22l7-5 7 5-2.5-8.5L22 9h-7z"/>
-                    </svg>
-                </button>
-                ${isFile && html`
-                    <button class="icon-btn" onClick=${onDownload} title="Download" style="width:32px; height:32px;">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
+            <div class="item-card-footer">
+                <div class="item-card-meta">
+                    ${item.category && html`<span>${item.category}</span>`}
+                    ${isFile && html`<span class="file-size">${formatSize(item.size_bytes)}</span>`}
+                    <span>${formatTime(item.updated_at)}</span>
+                </div>
+                <div class="item-card-actions">
+                    <button class="icon-btn-sm" onClick=${onPin} title=${isPinned ? 'Unpin' : 'Pin'}
+                        style="color: ${isPinned ? 'var(--accent-warning)' : 'var(--text-muted)'}">
+                        <svg viewBox="0 0 24 24" fill="${isPinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <path d="M12 2L9 9H2l5.5 4.5L5 22l7-5 7 5-2.5-8.5L22 9h-7z"/>
                         </svg>
                     </button>
-                `}
-                <button class="icon-btn" onClick=${onDelete} title="Delete" style="width:32px; height:32px;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                    </svg>
-                </button>
+                    ${isFile && html`
+                        <button class="icon-btn-sm" onClick=${onDownload} title="Download">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                        </button>
+                    `}
+                    <button class="icon-btn-sm" onClick=${onDelete} title="Delete">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
         </div>
     `;

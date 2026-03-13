@@ -29,7 +29,7 @@ export function ContentViewer({ item, onClose }) {
                 }
             } else {
                 // Fetch rendered content from server
-                const res = await fetch(`/api/items/${item.id}/render`);
+                const res = await fetch(`/share/api/items/${item.id}/render`);
                 if (res.ok) {
                     setContent(await res.text());
                 } else {
@@ -61,7 +61,7 @@ export function ContentViewer({ item, onClose }) {
                 </span>
                 ${item.type === 'file' && html`
                     <button class="icon-btn"
-                        onClick=${() => window.open('/api/items/' + item.id + '/download', '_blank')}
+                        onClick=${() => window.open('/share/api/items/' + item.id + '/download', '_blank')}
                         title="Download">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>

@@ -4,7 +4,8 @@
 import { h } from 'preact';
 import { useState, useRef } from 'preact/hooks';
 import htm from 'htm';
-import { createNote, uploadFile, categories, showNotification } from '../store.js';
+import { createNote, uploadFile, showNotification } from '../store.js';
+import { CategoryPicker } from './CategoryPicker.js';
 
 const html = htm.bind(h);
 
@@ -86,14 +87,8 @@ export function AddSheet({ onClose, defaultType = 'note' }) {
                                 placeholder="Write your note..." rows="5"/>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Category (optional)</label>
-                            <input class="form-input" value=${category}
-                                onInput=${e => setCategory(e.target.value)}
-                                placeholder="e.g. work, personal"
-                                list="cat-list"/>
-                            <datalist id="cat-list">
-                                ${categories.value.map(c => html`<option value=${c.name}/>`)}
-                            </datalist>
+                            <label class="form-label">Category</label>
+                            <${CategoryPicker} value=${category} onChange=${v => setCategory(v)}/>
                         </div>
                         <div class="form-actions">
                             <button class="btn-secondary" onClick=${onClose}>Cancel</button>
@@ -104,14 +99,8 @@ export function AddSheet({ onClose, defaultType = 'note' }) {
                 ` : html`
                     <div>
                         <div class="form-group">
-                            <label class="form-label">Category (optional)</label>
-                            <input class="form-input" value=${category}
-                                onInput=${e => setCategory(e.target.value)}
-                                placeholder="e.g. docs, images"
-                                list="cat-list-file"/>
-                            <datalist id="cat-list-file">
-                                ${categories.value.map(c => html`<option value=${c.name}/>`)}
-                            </datalist>
+                            <label class="form-label">Category</label>
+                            <${CategoryPicker} value=${category} onChange=${v => setCategory(v)}/>
                         </div>
                         <div class="upload-area ${dragover ? 'dragover' : ''}"
                             onClick=${() => fileRef.current?.click()}

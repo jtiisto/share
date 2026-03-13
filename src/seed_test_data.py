@@ -6,10 +6,10 @@ import shutil
 import urllib.request
 from pathlib import Path
 
-from config import CONTENT_DIR
+import config
 from database import (
-    init_database, create_item, create_category, update_item, set_meta,
-    get_utc_now,
+    init_database, create_item, create_category, update_item,
+    set_meta, get_utc_now,
 )
 
 
@@ -100,21 +100,27 @@ def download_file(url: str, dest: Path) -> int:
 def seed():
     print("Seeding test data...")
 
-    # Clean and recreate content directory
-    if CONTENT_DIR.exists():
-        shutil.rmtree(CONTENT_DIR)
-    CONTENT_DIR.mkdir(parents=True)
+    content_dir = config.CONTENT_DIR
+    db_path = config.DB_PATH
+
+    # Clean content directory and database for fresh seed
+    if content_dir.exists():
+        shutil.rmtree(content_dir)
+    content_dir.mkdir(parents=True)
+
+    if db_path.exists():
+        db_path.unlink()
 
     init_database()
 
     # Create categories
     for cat in CATEGORIES:
         create_category(cat["name"], cat["color"], cat["sort_order"])
-        (CONTENT_DIR / cat["name"]).mkdir(exist_ok=True)
+        (content_dir / cat["name"]).mkdir(exist_ok=True)
         print(f"  Category: {cat['name']}")
 
     # Markdown recipe file
-    recipe_path = CONTENT_DIR / "recipes" / "pasta-aglio-e-olio.md"
+    recipe_path = content_dir / "recipes" / "pasta-aglio-e-olio.md"
     recipe_path.write_text(MARKDOWN_RECIPE)
     create_item(
         item_type="file",
@@ -128,7 +134,7 @@ def seed():
     print("  File: pasta-aglio-e-olio.md (recipes)")
 
     # HTML doc
-    html_path = CONTENT_DIR / "docs" / "http-status-codes.html"
+    html_path = content_dir / "docs" / "http-status-codes.html"
     html_path.write_text(HTML_DOC)
     create_item(
         item_type="file",
@@ -143,7 +149,7 @@ def seed():
 
     # Plain text file
     changelog = "v1.0 - Initial release\nv1.1 - Added offline sync\nv1.2 - Category management\n"
-    txt_path = CONTENT_DIR / "docs" / "changelog.txt"
+    txt_path = content_dir / "docs" / "changelog.txt"
     txt_path.write_text(changelog)
     create_item(
         item_type="file",
@@ -191,7 +197,7 @@ def seed():
 
     # Download image
     for dl in DOWNLOADS:
-        dest_dir = CONTENT_DIR / dl["category"] if dl["category"] else CONTENT_DIR
+        dest_dir = content_dir / dl["category"] if dl["category"] else content_dir
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = dest_dir / dl["filename"]
         rel = dl["filename"] if not dl["category"] else f"{dl['category']}/{dl['filename']}"

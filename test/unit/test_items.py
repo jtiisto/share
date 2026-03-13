@@ -291,6 +291,7 @@ class TestStaticFiles:
         resp = client.get("/sw.js")
         assert resp.status_code == 200
         assert "$SERVER_VERSION$" not in resp.text
+        assert "$BASE_PATH$" not in resp.text
 
     def test_serve_icon(self, client):
         resp = client.get("/icons/icon-192.png")

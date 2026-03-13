@@ -1,25 +1,28 @@
 // Personal Share PWA - Service Worker
 // Caching strategy:
-//   /api/*      -> network-only
+//   /api/*      -> network-only (with offline share queuing)
 //   esm.sh CDN  -> cache-first
 //   app shell   -> network-first with cache fallback
 
 const CACHE_VERSION = '$SERVER_VERSION$';
 const CDN_CACHE = 'share-cdn-v1';
+const SHARE_QUEUE_STORE = 'share-offline-queue';
+const B = '$BASE_PATH$';
 
 const APP_SHELL_URLS = [
-  '/',
-  '/styles.css',
-  '/manifest.json',
-  '/js/app.js',
-  '/js/store.js',
-  '/js/items/ItemsView.js',
-  '/js/items/ItemCard.js',
-  '/js/items/NotesView.js',
-  '/js/items/NoteCard.js',
-  '/js/items/AddSheet.js',
-  '/js/items/ContentViewer.js',
-  '/js/items/ShareReceiver.js',
+  B + '/',
+  B + '/styles.css',
+  B + '/manifest.json',
+  B + '/js/app.js',
+  B + '/js/store.js',
+  B + '/js/items/ItemsView.js',
+  B + '/js/items/ItemCard.js',
+  B + '/js/items/NotesView.js',
+  B + '/js/items/NoteCard.js',
+  B + '/js/items/AddSheet.js',
+  B + '/js/items/ContentViewer.js',
+  B + '/js/items/ShareReceiver.js',
+  B + '/js/items/CategoryPicker.js',
 ];
 
 const CDN_URLS = [
@@ -30,6 +33,59 @@ const CDN_URLS = [
   'https://esm.sh/localforage@1.10.0',
   'https://esm.sh/marked@15.0.7',
 ];
+
+// ---------------------------------------------------------------------------
+// IndexedDB helpers for offline share queue
+// ---------------------------------------------------------------------------
+function openQueueDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(SHARE_QUEUE_STORE, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore('queue', { autoIncrement: true });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function enqueueShare(data) {
+  const db = await openQueueDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('queue', 'readwrite');
+    tx.objectStore('queue').add(data);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function drainShareQueue() {
+  const db = await openQueueDB();
+  const items = await new Promise((resolve, reject) => {
+    const tx = db.transaction('queue', 'readonly');
+    const req = tx.objectStore('queue').getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+  if (items.length === 0) return;
+
+  for (const entry of items) {
+    try {
+      const form = new FormData();
+      if (entry.title) form.append('title', entry.title);
+      if (entry.text) form.append('text', entry.text);
+      if (entry.url) form.append('url', entry.url);
+      await fetch(B + '/api/share', { method: 'POST', body: form });
+    } catch {
+      // If still offline, stop trying
+      return;
+    }
+  }
+
+  // Clear the queue
+  const tx = db.transaction('queue', 'readwrite');
+  tx.objectStore('queue').clear();
+}
 
 // ---------------------------------------------------------------------------
 // Install
@@ -66,8 +122,14 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // API requests: network-only
-  if (url.pathname.startsWith('/api/')) {
+  // Intercept POST /share/api/share when offline — queue for later
+  if (url.pathname === B + '/api/share' && request.method === 'POST') {
+    event.respondWith(handleShareRequest(request));
+    return;
+  }
+
+  // Other API requests: network-only
+  if (url.pathname.startsWith(B + '/api/')) {
     return;
   }
 
@@ -80,6 +142,47 @@ self.addEventListener('fetch', (event) => {
   // App shell: network-first with cache fallback
   if (url.origin === self.location.origin) {
     event.respondWith(networkFirstAppShell(request));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Handle share requests (with offline fallback)
+// ---------------------------------------------------------------------------
+async function handleShareRequest(request) {
+  try {
+    const response = await fetch(request.clone());
+    return response;
+  } catch (_err) {
+    // Offline: extract form data and queue it
+    try {
+      const formData = await request.formData();
+      const data = {};
+      for (const [key, value] of formData.entries()) {
+        if (typeof value === 'string') {
+          data[key] = value;
+        }
+        // Note: file shares can't be queued easily, only text/url
+      }
+      if (data.title || data.text || data.url) {
+        await enqueueShare(data);
+      }
+    } catch {
+      // formData parsing failed
+    }
+
+    return new Response(
+      JSON.stringify({ queued: true, message: 'Saved offline, will sync when back online' }),
+      { status: 202, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Drain queue when coming back online
+// ---------------------------------------------------------------------------
+self.addEventListener('message', (event) => {
+  if (event.data === 'drain-share-queue') {
+    drainShareQueue();
   }
 });
 
@@ -113,7 +216,7 @@ async function networkFirstAppShell(request) {
     if (cached) return cached;
 
     if (request.mode === 'navigate') {
-      const fallback = await cache.match('/');
+      const fallback = await cache.match(B + '/');
       if (fallback) return fallback;
 
       return new Response(
