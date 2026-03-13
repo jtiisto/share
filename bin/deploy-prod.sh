@@ -101,6 +101,25 @@ done
 # Requirements
 copy_file "$PROJECT_ROOT/requirements.txt" "$PROD_DIR/requirements.txt" "requirements.txt"
 
+# Claude Code skill — copy to prod, then symlink to ~/.claude/skills/
+SKILL_SRC_DIR="$PROJECT_ROOT/skills/share-note"
+SKILL_PROD_DIR="$PROD_DIR/skills/share-note"
+SKILL_LINK_DIR="$HOME/.claude/skills/share-note"
+if [ -d "$SKILL_SRC_DIR" ]; then
+    echo "  Syncing share-note skill..."
+    mkdir -p "$SKILL_PROD_DIR"
+    # Copy skill file, replacing dev path with prod path in the content
+    sed "s|$PROJECT_ROOT|$PROD_DIR|g" "$SKILL_SRC_DIR/SKILL.md" > "$SKILL_PROD_DIR/SKILL.md"
+    # Symlink to ~/.claude/skills/ so Claude Code loads it
+    if [ -L "$SKILL_LINK_DIR" ]; then
+        rm "$SKILL_LINK_DIR"
+    elif [ -d "$SKILL_LINK_DIR" ]; then
+        rm -rf "$SKILL_LINK_DIR"
+    fi
+    ln -s "$SKILL_PROD_DIR" "$SKILL_LINK_DIR"
+    echo "  Linked $SKILL_LINK_DIR -> $SKILL_PROD_DIR"
+fi
+
 echo ""
 
 # ==================== Data directory (safe) ====================
