@@ -381,6 +381,11 @@ body {
     flex-shrink: 0;
 }
 
+.item-card-category-picker {
+    padding: 8px 12px 4px;
+    border-top: 1px solid var(--border-primary);
+}
+
 .icon-btn-sm {
     width: 32px;
     height: 32px;

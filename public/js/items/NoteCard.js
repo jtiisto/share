@@ -5,14 +5,26 @@ import { h } from 'preact';
 import { useState } from 'preact/hooks';
 import htm from 'htm';
 import { togglePin, deleteItem, updateItem, formatTime, showNotification, viewingItem } from '../store.js';
+import { CategoryPicker } from './CategoryPicker.js';
 
 const html = htm.bind(h);
 
 export function NoteCard({ item }) {
     const [editing, setEditing] = useState(false);
+    const [showCatPicker, setShowCatPicker] = useState(false);
     const [editTitle, setEditTitle] = useState(item.title);
     const [editContent, setEditContent] = useState(item.content || '');
     const isPinned = item.pinned;
+
+    const onCategoryChange = async (category) => {
+        try {
+            await updateItem(item.id, { category });
+            setShowCatPicker(false);
+            showNotification('Category updated', 'success');
+        } catch {
+            showNotification('Failed to update category', 'error');
+        }
+    };
 
     const onCopy = async (e) => {
         e.stopPropagation();
@@ -106,6 +118,12 @@ export function NoteCard({ item }) {
                     <span>${formatTime(item.updated_at)}</span>
                 </div>
                 <div class="item-card-actions">
+                    <button class="icon-btn-sm" onClick=${(e) => { e.stopPropagation(); setShowCatPicker(!showCatPicker); }} title="Change category"
+                        style="color: ${showCatPicker ? 'var(--accent-primary)' : 'var(--text-muted)'}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                    </button>
                     <button class="icon-btn-sm" onClick=${onCopy} title="Copy">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
@@ -132,6 +150,12 @@ export function NoteCard({ item }) {
                     </button>
                 </div>
             </div>
+
+            ${showCatPicker && html`
+                <div class="item-card-category-picker" onClick=${(e) => e.stopPropagation()}>
+                    <${CategoryPicker} value=${item.category || ''} onChange=${onCategoryChange}/>
+                </div>
+            `}
         </div>
     `;
 }

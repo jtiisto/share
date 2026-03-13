@@ -23,6 +23,7 @@ export const isSyncing = signal(false);
 export const syncStatus = signal('gray');  // 'green' | 'red' | 'gray' | 'dirty'
 export const dirtyCount = signal(0);
 export const selectedCategory = signal(null);
+export const selectedNoteCategory = signal(null);
 export const viewingItem = signal(null);
 
 // ==================== API Helpers ====================

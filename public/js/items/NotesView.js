@@ -1,20 +1,41 @@
 /**
- * NotesView — Note list with inline editing
+ * NotesView — Note list with category filter + inline editing
  */
 import { h } from 'preact';
+import { useEffect } from 'preact/hooks';
 import htm from 'htm';
-import { items } from '../store.js';
+import { items, categories, loadCategories, selectedNoteCategory } from '../store.js';
 import { NoteCard } from './NoteCard.js';
 
 const html = htm.bind(h);
 
 export function NotesView() {
-    const notes = items.value.filter(i => i.type === 'note');
+    useEffect(() => {
+        loadCategories();
+    }, []);
+
+    const allNotes = items.value.filter(i => i.type === 'note');
+    const cat = selectedNoteCategory.value;
+    const notes = cat ? allNotes.filter(i => i.category === cat) : allNotes;
     const pinned = notes.filter(i => i.pinned);
     const unpinned = notes.filter(i => !i.pinned);
 
     return html`
         <div>
+            <div class="category-filter">
+                <button class="category-chip ${!cat ? 'active' : ''}"
+                    onClick=${() => { selectedNoteCategory.value = null; }}>All</button>
+                ${categories.value.map(c => html`
+                    <button key=${c.name}
+                        class="category-chip ${cat === c.name ? 'active' : ''}"
+                        style=${c.color ? `--chip-color: ${c.color}` : ''}
+                        onClick=${() => { selectedNoteCategory.value = c.name; }}>
+                        ${c.color ? html`<span class="cat-color-dot" style="background:${c.color}; width:8px; height:8px; display:inline-block; margin-right:4px; vertical-align:middle;"></span>` : null}
+                        ${c.name}
+                    </button>
+                `)}
+            </div>
+
             ${notes.length === 0 && html`
                 <div class="empty-state">
                     <div class="empty-state-icon">
