@@ -96,6 +96,31 @@ Download files or export notes from any machine with network access to the serve
 
 Notes are saved as Markdown files. Files are downloaded with their original filename. If a file already exists, a number suffix is added (e.g. `report_1.pdf`).
 
+## Claude Code Skills
+
+Two [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) are included for sharing and fetching directly from Claude Code conversations.
+
+### `/personal-share`
+
+Share notes, URLs, text, or files to the app from any Claude Code session.
+
+```
+/personal-share https://docs.python.org/3/
+/personal-share -c "recipes" Grandma's cookie recipe: mix flour and sugar
+/personal-share /path/to/document.pdf
+```
+
+### `/personal-fetch`
+
+Fetch files or notes from the app to a local directory.
+
+```
+/personal-fetch deploy reminder
+/personal-fetch cookie recipe
+```
+
+The skills are deployed to `~/.claude/skills/` by the deploy script, making them available globally in Claude Code. They use the CLI scripts (`personal-share.sh`, `personal-fetch.sh`) under the hood.
+
 ## File Watcher
 
 The server monitors `data/content/` for filesystem changes. Subdirectories map to categories:
