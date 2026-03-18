@@ -9,11 +9,47 @@ import { CategoryPicker } from './CategoryPicker.js';
 
 const html = htm.bind(h);
 
+// Extensions renderable as markup (existing behavior)
+const MARKUP_EXTS = new Set(['html', 'htm', 'md', 'markdown', 'txt']);
+
+// Extensions renderable with syntax highlighting (highlight.js supported languages)
+const CODE_EXTS = new Set([
+    // Web
+    'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'css', 'scss', 'sass', 'less',
+    // Data / config
+    'json', 'yaml', 'yml', 'toml', 'xml', 'svg', 'csv', 'ini', 'cfg', 'conf',
+    'properties', 'env', 'graphql', 'gql', 'proto',
+    // Systems / compiled
+    'py', 'rb', 'go', 'rs', 'java', 'c', 'h', 'cpp', 'hpp', 'cc', 'cxx',
+    'cs', 'swift', 'kt', 'kts', 'scala', 'dart', 'zig', 'nim', 'v',
+    // Scripting / shell
+    'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd', 'lua', 'perl', 'pl',
+    'r', 'php',
+    // Functional
+    'hs', 'elm', 'clj', 'cljs', 'ex', 'exs', 'erl', 'ml', 'fs', 'fsx',
+    'lisp', 'scm',
+    // Database / query
+    'sql',
+    // Infra / build
+    'dockerfile', 'tf', 'hcl', 'nix', 'cmake', 'gradle', 'makefile',
+    // Docs / diff
+    'diff', 'patch', 'log',
+    // Other
+    'asm', 'wasm', 'vhdl', 'verilog',
+]);
+
 function canRender(item) {
     if (item.type === 'note') return true;
     const ext = (item.filename || '').split('.').pop().toLowerCase();
-    return ['html', 'htm', 'md', 'markdown', 'txt'].includes(ext);
+    return MARKUP_EXTS.has(ext) || CODE_EXTS.has(ext);
 }
+
+function isCodeFile(item) {
+    const ext = (item.filename || '').split('.').pop().toLowerCase();
+    return CODE_EXTS.has(ext);
+}
+
+export { CODE_EXTS };
 
 export function ItemCard({ item }) {
     const [showCatPicker, setShowCatPicker] = useState(false);

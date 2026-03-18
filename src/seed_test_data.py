@@ -81,6 +81,57 @@ code { background: #f0f0f0; padding: 2px 4px; border-radius: 3px; }
 """
 
 
+JSON_SAMPLE = """\
+{
+  "name": "Personal Share",
+  "version": "1.0.0",
+  "description": "Cross-device file and note sharing",
+  "dependencies": {
+    "fastapi": ">=0.100",
+    "uvicorn": ">=0.20",
+    "watchdog": ">=3.0"
+  },
+  "features": ["offline-sync", "pwa", "websocket", "file-watcher"],
+  "config": {
+    "port": 9100,
+    "database": "data/share.db",
+    "debug": false
+  }
+}
+"""
+
+PYTHON_SAMPLE = """\
+#!/usr/bin/env python3
+\"\"\"Example: Fibonacci with memoization.\"\"\"
+from functools import lru_cache
+from typing import Generator
+
+
+@lru_cache(maxsize=None)
+def fibonacci(n: int) -> int:
+    if n < 2:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
+
+
+def fib_sequence(limit: int) -> Generator[int, None, None]:
+    \"\"\"Yield Fibonacci numbers up to *limit*.\"\"\"
+    i = 0
+    while True:
+        val = fibonacci(i)
+        if val > limit:
+            break
+        yield val
+        i += 1
+
+
+if __name__ == "__main__":
+    for num in fib_sequence(1000):
+        print(num, end=" ")
+    print()
+"""
+
+
 def download_file(url: str, dest: Path) -> int:
     """Download a file, return size in bytes."""
     try:
@@ -161,6 +212,34 @@ def seed():
         source="web",
     )
     print("  File: changelog.txt (docs)")
+
+    # JSON sample file
+    json_path = content_dir / "docs" / "sample-config.json"
+    json_path.write_text(JSON_SAMPLE)
+    create_item(
+        item_type="file",
+        title="Sample Config",
+        category="docs",
+        filename="docs/sample-config.json",
+        mime_type="application/json",
+        size_bytes=len(JSON_SAMPLE.encode()),
+        source="web",
+    )
+    print("  File: sample-config.json (docs)")
+
+    # Python sample file
+    py_path = content_dir / "docs" / "fibonacci.py"
+    py_path.write_text(PYTHON_SAMPLE)
+    create_item(
+        item_type="file",
+        title="Fibonacci Example",
+        category="docs",
+        filename="docs/fibonacci.py",
+        mime_type="text/x-python",
+        size_bytes=len(PYTHON_SAMPLE.encode()),
+        source="web",
+    )
+    print("  File: fibonacci.py (docs)")
 
     # Notes with URLs (links category)
     create_item(

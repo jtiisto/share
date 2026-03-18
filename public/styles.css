@@ -683,6 +683,48 @@ body {
 
 .rendered-content a:hover { text-decoration: underline; }
 
+/* ==================== Syntax Highlighting (highlight.js) ==================== */
+
+.rendered-content pre.hljs {
+    background-color: var(--input-bg);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    line-height: 1.5;
+    font-size: 0.875rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+.rendered-content pre.hljs code {
+    background: none;
+    padding: 0;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+}
+
+/* Token colors — tuned to match the app's dark navy palette */
+.hljs { color: var(--text-primary); }
+.hljs-comment, .hljs-quote { color: #6a7a8a; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-meta { color: #e94560; }
+.hljs-string, .hljs-addition { color: #4ade80; }
+.hljs-number, .hljs-literal { color: #fbbf24; }
+.hljs-built_in, .hljs-builtin-name { color: #38bdf8; }
+.hljs-function .hljs-title, .hljs-title.function_ { color: #60a5fa; }
+.hljs-class .hljs-title, .hljs-title.class_ { color: #c084fc; }
+.hljs-type, .hljs-params { color: #c084fc; }
+.hljs-attr, .hljs-attribute { color: #60a5fa; }
+.hljs-symbol, .hljs-bullet { color: #f472b6; }
+.hljs-variable, .hljs-template-variable { color: #fb923c; }
+.hljs-regexp { color: #f472b6; }
+.hljs-deletion { color: #ef4444; }
+.hljs-selector-id, .hljs-selector-class { color: #38bdf8; }
+.hljs-tag { color: #e94560; }
+.hljs-name { color: #e94560; }
+.hljs-meta .hljs-keyword { color: #fb923c; }
+.hljs-meta .hljs-string { color: #4ade80; }
+.hljs-section, .hljs-title { color: #60a5fa; font-weight: 600; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+
 /* ==================== Empty State ==================== */
 
 .empty-state {
