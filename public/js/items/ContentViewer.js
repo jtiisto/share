@@ -2,9 +2,9 @@
  * ContentViewer — Full-screen rendered content viewer for HTML, MD, code files, and notes
  */
 import { h } from 'preact';
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import htm from 'htm';
-import { CODE_EXTS } from './ItemCard.js';
+import { CODE_EXTS, IMAGE_EXTS } from './ItemCard.js';
 
 const html = htm.bind(h);
 
@@ -34,13 +34,41 @@ function isCodeItem(item) {
     return CODE_EXTS.has(getFileExt(item));
 }
 
+function isImageItem(item) {
+    if (item.type === 'note') return false;
+    return IMAGE_EXTS.has(getFileExt(item));
+}
+
+function getDownloadUrl(item) {
+    if (item.downloadUrl) return item.downloadUrl;
+    return `/share/api/items/${item.id}/download`;
+}
+
+function getRenderUrl(item) {
+    if (item.renderUrl) return item.renderUrl;
+    return `/share/api/items/${item.id}/render`;
+}
+
 export function ContentViewer({ item, onClose }) {
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(true);
+    const [zoomed, setZoomed] = useState(false);
+    const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+    const imgContainerRef = useRef(null);
+    const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
+    const isImage = isImageItem(item);
+    const downloadUrl = getDownloadUrl(item);
 
     useEffect(() => {
-        loadContent();
-    }, [item.id]);
+        if (!isImage) loadContent();
+        else setLoading(false);
+    }, [item.id || item.title]);
+
+    // Reset zoom state when item changes
+    useEffect(() => {
+        setZoomed(false);
+        setPanOffset({ x: 0, y: 0 });
+    }, [item.id || item.title]);
 
     async function loadContent() {
         setLoading(true);
@@ -60,8 +88,7 @@ export function ContentViewer({ item, onClose }) {
     }
 
     async function loadCodeContent() {
-        // Fetch raw file content via download endpoint
-        const res = await fetch(`/share/api/items/${item.id}/download`);
+        const res = await fetch(downloadUrl);
         if (!res.ok) {
             setContent('<p>Unable to load file</p>');
             return;
@@ -69,7 +96,6 @@ export function ContentViewer({ item, onClose }) {
         let text = await res.text();
         const ext = getFileExt(item);
 
-        // Pretty-print JSON
         if (ext === 'json') {
             try {
                 text = JSON.stringify(JSON.parse(text), null, 2);
@@ -87,7 +113,6 @@ export function ContentViewer({ item, onClose }) {
             }
             setContent(`<pre class="hljs"><code>${result.value}</code></pre>`);
         } catch {
-            // Fallback: plain pre block
             setContent(`<pre style="white-space:pre-wrap">${escapeHtml(text)}</pre>`);
         }
     }
@@ -103,7 +128,7 @@ export function ContentViewer({ item, onClose }) {
     }
 
     async function loadRenderedContent() {
-        const res = await fetch(`/share/api/items/${item.id}/render`);
+        const res = await fetch(getRenderUrl(item));
         if (res.ok) {
             setContent(await res.text());
         } else {
@@ -114,6 +139,42 @@ export function ContentViewer({ item, onClose }) {
     function escapeHtml(str) {
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
+
+    // Image zoom/pan handlers
+    const toggleZoom = useCallback((e) => {
+        // Don't toggle if we just finished a drag/pan
+        if (dragRef.current.didDrag) {
+            dragRef.current.didDrag = false;
+            return;
+        }
+        if (zoomed) {
+            setZoomed(false);
+            setPanOffset({ x: 0, y: 0 });
+        } else {
+            setZoomed(true);
+            setPanOffset({ x: 0, y: 0 });
+        }
+    }, [zoomed]);
+
+    const onPointerDown = useCallback((e) => {
+        if (!zoomed) return;
+        dragRef.current = { dragging: true, didDrag: false, startX: e.clientX, startY: e.clientY, startPanX: panOffset.x, startPanY: panOffset.y };
+        e.currentTarget.setPointerCapture(e.pointerId);
+    }, [zoomed, panOffset]);
+
+    const onPointerMove = useCallback((e) => {
+        if (!dragRef.current.dragging) return;
+        const dx = e.clientX - dragRef.current.startX;
+        const dy = e.clientY - dragRef.current.startY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragRef.current.didDrag = true;
+        setPanOffset({ x: dragRef.current.startPanX + dx, y: dragRef.current.startPanY + dy });
+    }, []);
+
+    const onPointerUp = useCallback(() => {
+        dragRef.current.dragging = false;
+    }, []);
+
+    const showDownload = item.type === 'file' || item.downloadUrl;
 
     return html`
         <div class="content-viewer">
@@ -127,9 +188,9 @@ export function ContentViewer({ item, onClose }) {
                 <span style="font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                     ${item.title}
                 </span>
-                ${item.type === 'file' && html`
+                ${showDownload && html`
                     <button class="icon-btn"
-                        onClick=${() => window.open('/share/api/items/' + item.id + '/download', '_blank')}
+                        onClick=${() => window.open(downloadUrl, '_blank')}
                         title="Download">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -139,12 +200,27 @@ export function ContentViewer({ item, onClose }) {
                     </button>
                 `}
             </div>
-            <div class="content-viewer-body">
-                ${loading
-                    ? html`<div class="loading"><div class="loading-spinner"></div></div>`
-                    : html`<div class="rendered-content" dangerouslySetInnerHTML=${{ __html: content }}/>`
-                }
-            </div>
+            ${isImage ? html`
+                <div class="content-viewer-image ${zoomed ? 'zoomed' : ''}"
+                    ref=${imgContainerRef}
+                    onClick=${toggleZoom}
+                    onPointerDown=${onPointerDown}
+                    onPointerMove=${onPointerMove}
+                    onPointerUp=${onPointerUp}>
+                    <img src=${downloadUrl}
+                        alt=${item.title}
+                        class="viewer-img ${zoomed ? 'zoomed' : ''}"
+                        style=${zoomed ? `transform: translate(${panOffset.x}px, ${panOffset.y}px)` : ''}
+                        draggable="false"/>
+                </div>
+            ` : html`
+                <div class="content-viewer-body">
+                    ${loading
+                        ? html`<div class="loading"><div class="loading-spinner"></div></div>`
+                        : html`<div class="rendered-content" dangerouslySetInnerHTML=${{ __html: content }}/>`
+                    }
+                </div>
+            `}
         </div>
     `;
 }

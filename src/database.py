@@ -70,6 +70,15 @@ def init_database():
         """)
 
         cursor.execute("""
+            CREATE TABLE IF NOT EXISTS shared_folders (
+                name        TEXT PRIMARY KEY,
+                target_path TEXT NOT NULL,
+                file_count  INTEGER DEFAULT 0,
+                created_at  TEXT NOT NULL
+            )
+        """)
+
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS meta (
                 key   TEXT PRIMARY KEY,
                 value TEXT
@@ -301,6 +310,59 @@ def cleanup_empty_category(name: str, content_dir: Path) -> bool:
             pass  # directory not empty (untracked files), leave it
 
     return True
+
+
+# ==================== Shared Folders ====================
+
+def create_shared_folder(name: str, target_path: str, file_count: int = 0) -> dict:
+    now = get_utc_now()
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO shared_folders (name, target_path, file_count, created_at) VALUES (?, ?, ?, ?)",
+            (name, target_path, file_count, now)
+        )
+        conn.commit()
+    return get_shared_folder(name)
+
+
+def get_shared_folder(name: str) -> Optional[dict]:
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM shared_folders WHERE name = ?", (name,)).fetchone()
+        return dict(row) if row else None
+
+
+def list_shared_folders() -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM shared_folders ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_shared_folder(name: str, **fields) -> Optional[dict]:
+    allowed = {"file_count"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return get_shared_folder(name)
+    with get_db() as conn:
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        params = list(updates.values()) + [name]
+        conn.execute(f"UPDATE shared_folders SET {set_clause} WHERE name = ?", params)
+        conn.commit()
+    return get_shared_folder(name)
+
+
+def delete_shared_folder(name: str) -> bool:
+    with get_db() as conn:
+        result = conn.execute("DELETE FROM shared_folders WHERE name = ?", (name,))
+        conn.commit()
+        return result.rowcount > 0
+
+
+def shared_folder_exists_by_target(target_path: str) -> bool:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM shared_folders WHERE target_path = ?", (target_path,)
+        ).fetchone()
+        return row is not None
 
 
 # ==================== Sync helpers ====================

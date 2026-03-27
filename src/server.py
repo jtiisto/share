@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
-from config import PUBLIC_DIR, CONTENT_DIR, BASE_PATH
+from config import PUBLIC_DIR, CONTENT_DIR, FOLDERS_DIR, BASE_PATH
 from database import init_database
 
 
@@ -59,6 +59,7 @@ async def ws_notify(event: str, data: dict):
 async def lifespan(app):
     init_database()
     CONTENT_DIR.mkdir(parents=True, exist_ok=True)
+    FOLDERS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Start file watcher
     observer = None
@@ -125,7 +126,9 @@ app = StripPrefixMiddleware(_inner_app, BASE_PATH)
 # ==================== API Routes ====================
 
 from modules.items import router as items_router
+from modules.folders import router as folders_router
 _inner_app.include_router(items_router, prefix="/api")
+_inner_app.include_router(folders_router, prefix="/api")
 
 
 # ==================== WebSocket ====================
@@ -254,16 +257,21 @@ if __name__ == "__main__":
 
         test_db = DATA_DIR / "test_share.db"
         test_content = DATA_DIR / "test_content"
+        test_folders = DATA_DIR / "test_folders"
 
         # Point config at test paths
         import config
         config.DB_PATH = test_db
         config.CONTENT_DIR = test_content
+        config.FOLDERS_DIR = test_folders
         CONTENT_DIR = test_content  # Update local import
 
-        # Also patch modules that captured CONTENT_DIR at import time
+        # Also patch modules that captured at import time
         import modules.items as items_mod
         items_mod.CONTENT_DIR = test_content
+
+        import modules.folders as folders_mod
+        folders_mod.FOLDERS_DIR = test_folders
 
         try:
             import modules.watcher as watcher_mod

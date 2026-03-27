@@ -42,7 +42,8 @@ src/
   database.py        # Schema, CRUD operations
   modules/
     items.py         # API routes: items, categories, sync, share
-    watcher.py       # Filesystem watcher with debounce
+    folders.py       # API routes: shared folder browsing
+    watcher.py       # Filesystem watcher with debounce (content + folders)
 public/
   index.html         # SPA entry point
   styles.css         # Dark theme, mobile-first
@@ -54,6 +55,7 @@ public/
     items/           # View components
 data/
   content/           # Watched directory (subdirs = categories)
+  folders/           # Symlinks to shared directories
 plans/
   REQUIREMENTS.md    # Spec — source of truth for features and status
 skills/
@@ -61,7 +63,8 @@ skills/
   personal-fetch/    # Claude Code skill for fetching (deployed to ~/.claude/skills/)
 test/
   conftest.py        # Test fixtures
-  unit/test_items.py # Unit/API tests (66 tests)
+  unit/test_items.py # Unit/API tests (items, images)
+  unit/test_folders.py # Unit/API tests (shared folders)
   e2e/test_app.py    # Playwright E2E tests (10 tests)
 bin/
   server.sh          # start/stop/restart/status/logs

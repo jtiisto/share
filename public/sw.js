@@ -23,6 +23,7 @@ const APP_SHELL_URLS = [
   B + '/js/items/ContentViewer.js',
   B + '/js/items/ShareReceiver.js',
   B + '/js/items/CategoryPicker.js',
+  B + '/js/items/FoldersView.js',
 ];
 
 const CDN_URLS = [

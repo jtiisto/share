@@ -6,6 +6,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 PUBLIC_DIR = PROJECT_ROOT / "public"
 CONTENT_DIR = DATA_DIR / "content"
 DB_PATH = Path(os.environ.get("SHARE_DB_PATH", str(DATA_DIR / "share.db")))
+FOLDERS_DIR = DATA_DIR / "folders"
 
 # Server
 DEFAULT_PORT = 9100

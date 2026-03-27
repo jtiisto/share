@@ -9,6 +9,11 @@ import { CategoryPicker } from './CategoryPicker.js';
 
 const html = htm.bind(h);
 
+// Image extensions (browser-renderable)
+const IMAGE_EXTS = new Set([
+    'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif',
+]);
+
 // Extensions renderable as markup (existing behavior)
 const MARKUP_EXTS = new Set(['html', 'htm', 'md', 'markdown', 'txt']);
 
@@ -41,7 +46,7 @@ const CODE_EXTS = new Set([
 function canRender(item) {
     if (item.type === 'note') return true;
     const ext = (item.filename || '').split('.').pop().toLowerCase();
-    return MARKUP_EXTS.has(ext) || CODE_EXTS.has(ext);
+    return MARKUP_EXTS.has(ext) || CODE_EXTS.has(ext) || IMAGE_EXTS.has(ext);
 }
 
 function isCodeFile(item) {
@@ -49,7 +54,7 @@ function isCodeFile(item) {
     return CODE_EXTS.has(ext);
 }
 
-export { CODE_EXTS };
+export { CODE_EXTS, IMAGE_EXTS };
 
 export function ItemCard({ item }) {
     const [showCatPicker, setShowCatPicker] = useState(false);

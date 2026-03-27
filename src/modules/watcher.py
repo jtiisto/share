@@ -13,10 +13,12 @@ from typing import Callable, Optional
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent, FileModifiedEvent, FileDeletedEvent
 
-from config import CONTENT_DIR, WATCHER_DEBOUNCE_MS, WATCHER_IGNORE_TTL_S
+from config import CONTENT_DIR, FOLDERS_DIR, WATCHER_DEBOUNCE_MS, WATCHER_IGNORE_TTL_S
 from database import (
     create_item, list_items, update_item, delete_item,
     ensure_category, cleanup_empty_category, get_utc_now,
+    create_shared_folder, get_shared_folder, delete_shared_folder,
+    list_shared_folders, shared_folder_exists_by_target,
 )
 
 
@@ -258,6 +260,54 @@ async def event_processor(
             await asyncio.sleep(1)
 
 
+class FolderEventHandler(FileSystemEventHandler):
+    """Watches data/folders/ for new/removed symlinks and syncs with the database."""
+
+    def __init__(self, loop: asyncio.AbstractEventLoop, notify_callback: Optional[Callable] = None):
+        super().__init__()
+        self._loop = loop
+        self._notify_callback = notify_callback
+
+    def _handle(self, event_type: str, path: str):
+        p = Path(path)
+        # Only care about direct entries in FOLDERS_DIR (not contents of symlinked dirs)
+        if p.parent != FOLDERS_DIR:
+            return
+        name = p.name
+        if name.startswith('.'):
+            return
+
+        if self._notify_callback:
+            self._loop.call_soon_threadsafe(
+                asyncio.ensure_future,
+                self._process(event_type, name, p)
+            )
+
+    async def _process(self, event_type: str, name: str, path: Path):
+        try:
+            if event_type in ("created",):
+                if path.is_symlink() and path.resolve().is_dir():
+                    target = str(path.resolve())
+                    if not get_shared_folder(name) and not shared_folder_exists_by_target(target):
+                        folder = create_shared_folder(name, target)
+                        if self._notify_callback:
+                            await self._notify_callback("folder:created", folder)
+            elif event_type == "deleted":
+                folder = get_shared_folder(name)
+                if folder:
+                    delete_shared_folder(name)
+                    if self._notify_callback:
+                        await self._notify_callback("folder:deleted", {"name": name})
+        except Exception as e:
+            print(f"Folder watcher error: {e}")
+
+    def on_created(self, event):
+        self._handle("created", event.src_path)
+
+    def on_deleted(self, event):
+        self._handle("deleted", event.src_path)
+
+
 def start_watcher(
     notify_callback: Optional[Callable] = None,
 ) -> tuple[Observer, asyncio.Task, asyncio.Queue]:
@@ -265,6 +315,7 @@ def start_watcher(
     Returns (observer, processor_task, queue).
     """
     CONTENT_DIR.mkdir(parents=True, exist_ok=True)
+    FOLDERS_DIR.mkdir(parents=True, exist_ok=True)
 
     loop = asyncio.get_event_loop()
     queue = asyncio.Queue()
@@ -272,6 +323,11 @@ def start_watcher(
     handler = ContentEventHandler(queue, loop)
     observer = Observer()
     observer.schedule(handler, str(CONTENT_DIR), recursive=True)
+
+    # Watch folders directory for symlink add/remove
+    folder_handler = FolderEventHandler(loop, notify_callback)
+    observer.schedule(folder_handler, str(FOLDERS_DIR), recursive=False)
+
     observer.daemon = True
     observer.start()
 

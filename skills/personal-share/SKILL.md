@@ -24,6 +24,7 @@ Optional flags:
 If no explicit title is given:
 - For URLs: use the domain as the title
 - For files: use the filename
+- For directories: use the directory name
 - For other text: use the first 50 characters
 
 ## Implementation
@@ -45,6 +46,9 @@ $SHARE_DIR/bin/personal-share.sh /path/to/file.pdf
 
 # File upload with category and title:
 $SHARE_DIR/bin/personal-share.sh -c "docs" -t "Manual" /path/to/file.pdf
+
+# Share a directory (appears in Folders tab):
+$SHARE_DIR/bin/personal-share.sh /path/to/directory
 
 # Multi-line content via pipe:
 echo "line1
@@ -75,3 +79,6 @@ User: "share this file to my phone: @~/docs/report.pdf"
 
 User: "share this pdf under docs: @/tmp/manual.pdf"
 → `$SHARE_DIR/bin/personal-share.sh -c "docs" /tmp/manual.pdf`
+
+User: "share this folder so I can browse it on my phone: ~/dev/project"
+→ `$SHARE_DIR/bin/personal-share.sh ~/dev/project`

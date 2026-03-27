@@ -683,6 +683,57 @@ body {
 
 .rendered-content a:hover { text-decoration: underline; }
 
+/* ==================== Folder Contents Header ==================== */
+
+.folder-contents-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.folder-contents-title {
+    font-weight: 500;
+    font-size: var(--font-size-md);
+    flex: 1;
+}
+
+/* ==================== Image Viewer ==================== */
+
+.content-viewer-image {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    cursor: zoom-in;
+    touch-action: none;
+    user-select: none;
+}
+
+.content-viewer-image.zoomed {
+    cursor: grab;
+}
+
+.content-viewer-image.zoomed:active {
+    cursor: grabbing;
+}
+
+.viewer-img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transition: none;
+}
+
+.viewer-img.zoomed {
+    max-width: none;
+    max-height: none;
+    width: auto;
+    height: auto;
+}
+
 /* ==================== Syntax Highlighting (highlight.js) ==================== */
 
 .rendered-content pre.hljs {

@@ -648,6 +648,60 @@ class TestDatabaseEdgeCases:
         assert result is None
 
 
+class TestImageViewing:
+    """Tests for inline image viewing support."""
+
+    def test_upload_image(self, client):
+        """Image files are uploaded with correct MIME type."""
+        resp = client.post("/api/items/upload", files={
+            "file": ("photo.jpg", b"\xff\xd8\xff\xe0\x00\x10JFIF", "image/jpeg"),
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["type"] == "file"
+        assert data["mime_type"] == "image/jpeg"
+
+    def test_download_image(self, client):
+        """Uploaded image can be downloaded for viewing."""
+        img_data = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
+        resp = client.post("/api/items/upload", files={
+            "file": ("test.png", img_data, "image/png"),
+        })
+        item_id = resp.json()["id"]
+
+        resp = client.get(f"/api/items/{item_id}/download")
+        assert resp.status_code == 200
+        assert resp.content == img_data
+
+    def test_image_formats(self, client):
+        """Various image formats upload correctly."""
+        formats = [
+            ("test.jpg", "image/jpeg"),
+            ("test.png", "image/png"),
+            ("test.gif", "image/gif"),
+            ("test.webp", "image/webp"),
+            ("test.svg", "image/svg+xml"),
+            ("test.bmp", "image/bmp"),
+            ("test.avif", "image/avif"),
+        ]
+        for filename, mime in formats:
+            resp = client.post("/api/items/upload", files={
+                "file": (filename, b"\x00" * 10, mime),
+            })
+            assert resp.status_code == 200, f"Failed for {filename}"
+            assert resp.json()["mime_type"] == mime
+
+    def test_image_with_category(self, client):
+        """Image upload with category works."""
+        resp = client.post("/api/items/upload", data={
+            "category": "photos",
+        }, files={
+            "file": ("sunset.jpg", b"\xff\xd8\xff\xe0", "image/jpeg"),
+        })
+        assert resp.status_code == 200
+        assert resp.json()["category"] == "photos"
+
+
 class TestWebSocket:
     def test_websocket_ping_pong(self, client):
         with client.websocket_connect("/ws") as ws:
