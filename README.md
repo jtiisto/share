@@ -14,8 +14,7 @@ Built as an installable PWA with a FastAPI backend. No cloud services, no accoun
 - **Offline support** — service worker caches the app; notes created offline sync when back online
 - **Android share target** — share text, URLs, and files from Android's share menu
 - **File watcher** — drop files into `data/content/` on the server and they appear automatically
-- **CLI sharing** — `personal-share.sh` for quick notes and file uploads from the terminal
-- **CLI fetching** — `personal-fetch.sh` for downloading items to any machine
+- **CLI tool** — `share-cli.sh` with `share` / `fetch` / `list` / `delete` subcommands for managing items from the terminal
 - **Claude Code skills** — `/personal-share` and `/personal-fetch` for sharing and fetching from Claude Code
 
 ## Requirements
@@ -50,51 +49,68 @@ pip install -r requirements.txt
 
 The app is available at `http://localhost:9100/share/`.
 
-## Quick Share from CLI
+## Command-Line Tool
+
+All terminal operations run through one dispatcher, `./bin/share-cli.sh <command>`, with
+`share`, `fetch`, `list`, and `delete` subcommands. Every command accepts `-p PORT` (default
+9100, or `$SHARE_PORT`). Run `./bin/share-cli.sh --help`, or `./bin/share-cli.sh <command> --help`
+for per-command options.
+
+### Share
 
 ```bash
 # Share a URL (title auto-derived from domain)
-./bin/personal-share.sh "https://example.com/article"
+./bin/share-cli.sh share "https://example.com/article"
 
 # Share a note with explicit title
-./bin/personal-share.sh -t "Deploy reminder" "remember to deploy on Friday"
+./bin/share-cli.sh share -t "Deploy reminder" "remember to deploy on Friday"
 
 # Share with a category
-./bin/personal-share.sh -c "links" "https://docs.python.org/3/"
+./bin/share-cli.sh share -c "links" "https://docs.python.org/3/"
 
-# Share a file
-./bin/personal-share.sh /path/to/document.pdf
+# Share a file (optionally with category and title)
+./bin/share-cli.sh share /path/to/document.pdf
+./bin/share-cli.sh share -c "docs" -t "API Reference" /path/to/api-docs.pdf
 
-# Share a file with category and title
-./bin/personal-share.sh -c "docs" -t "API Reference" /path/to/api-docs.pdf
+# Share a directory (appears in the Folders tab)
+./bin/share-cli.sh share /path/to/directory
 
 # Pipe support (always creates a note)
-echo "some text" | ./bin/personal-share.sh -t "Piped Note"
+echo "some text" | ./bin/share-cli.sh share -t "Piped Note"
 ```
 
-## Fetch from CLI
+### List & Fetch
 
-Download files or export notes from any machine with network access to the server.
+Browse items and download files or export notes from any machine with network access to the server.
 
 ```bash
-# List recent items
-./bin/personal-fetch.sh --list
+# List recent items (aliases: ls)
+./bin/share-cli.sh list
 
-# List only files or notes
-./bin/personal-fetch.sh --list --type file
-./bin/personal-fetch.sh --list --type note
+# Filter the list by type or category
+./bin/share-cli.sh list --type file
+./bin/share-cli.sh list --type note
+./bin/share-cli.sh list --category "docs"
 
-# List items in a category
-./bin/personal-fetch.sh --list --category "docs"
-
-# Fetch by title (partial match, must be unique)
-./bin/personal-fetch.sh "report"
+# Fetch by title (partial match, must be unique; alias: get)
+./bin/share-cli.sh fetch "report"
 
 # Fetch to a specific directory
-./bin/personal-fetch.sh -o /tmp "cookie recipe"
+./bin/share-cli.sh fetch -o /tmp "cookie recipe"
 ```
 
 Notes are saved as Markdown files. Files are downloaded with their original filename. If a file already exists, a number suffix is added (e.g. `report_1.pdf`).
+
+### Delete
+
+Delete an item by partial title match (same matching as `fetch`; alias: `rm`). A unique match is
+removed immediately with **no confirmation**; if the term matches zero or multiple items, the
+command lists the matches and aborts without deleting anything. For file items the server also
+removes the file from disk and cleans up the category if it becomes empty.
+
+```bash
+./bin/share-cli.sh delete "cookie recipe"
+```
 
 ## Claude Code Skills
 
@@ -119,7 +135,7 @@ Fetch files or notes from the app to a local directory.
 /personal-fetch cookie recipe
 ```
 
-The skills are deployed to `~/.claude/skills/` by the deploy script, making them available globally in Claude Code. They use the CLI scripts (`personal-share.sh`, `personal-fetch.sh`) under the hood.
+The skills are deployed to `~/.claude/skills/` by the deploy script, making them available globally in Claude Code. They call the `share-cli.sh` subcommands (`share`, `fetch`, `list`) under the hood.
 
 ## File Watcher
 
@@ -289,7 +305,6 @@ test/
   e2e/               # Playwright browser tests
 bin/
   server.sh          # Server control (start/stop/restart/status/logs)
-  personal-share.sh  # CLI for sharing notes and files
-  personal-fetch.sh  # CLI for fetching items to local directory
+  share-cli.sh       # CLI: share / fetch / list / delete subcommands
   deploy-prod.sh     # Production deployment
 ```

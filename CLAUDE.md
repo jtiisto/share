@@ -68,8 +68,7 @@ test/
   e2e/test_app.py    # Playwright E2E tests (10 tests)
 bin/
   server.sh          # start/stop/restart/status/logs
-  personal-share.sh  # CLI for sharing notes and files
-  personal-fetch.sh  # CLI for fetching items to local directory
+  share-cli.sh       # CLI: share / fetch / list / delete subcommands
   deploy-prod.sh     # Deploy to production (syncs skills + symlinks)
 ```
 

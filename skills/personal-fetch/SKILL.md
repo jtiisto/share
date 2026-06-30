@@ -22,21 +22,21 @@ Optional:
 
 ## Implementation
 
-Use the fetch CLI at the Personal Share project:
+Use the `list` and `fetch` subcommands of the share CLI at the Personal Share project:
 
 ```bash
 # List items to find the right one:
-$SHARE_DIR/bin/personal-fetch.sh --list
+$SHARE_DIR/bin/share-cli.sh list
 
 # List only files or notes:
-$SHARE_DIR/bin/personal-fetch.sh --list --type file
-$SHARE_DIR/bin/personal-fetch.sh --list --type note
+$SHARE_DIR/bin/share-cli.sh list --type file
+$SHARE_DIR/bin/share-cli.sh list --type note
 
 # Fetch by title match:
-$SHARE_DIR/bin/personal-fetch.sh "search term"
+$SHARE_DIR/bin/share-cli.sh fetch "search term"
 
 # Fetch to a specific directory:
-$SHARE_DIR/bin/personal-fetch.sh -o /tmp "search term"
+$SHARE_DIR/bin/share-cli.sh fetch -o /tmp "search term"
 ```
 
 The server runs on port 9100 (production). If the user says "test" or you know the test server is running, use `-p 9101`.
@@ -45,25 +45,25 @@ The server runs on port 9100 (production). If the user says "test" or you know t
 
 1. First, list items to find what the user is looking for:
    ```bash
-   $SHARE_DIR/bin/personal-fetch.sh --list
+   $SHARE_DIR/bin/share-cli.sh list
    ```
 2. Identify the best match for the user's request from the list
 3. If the match is ambiguous (multiple plausible items), ask the user which one they want
 4. Fetch the item using a specific enough search term to get exactly one match:
    ```bash
-   $SHARE_DIR/bin/personal-fetch.sh -o /path/to/dir "exact title or unique part"
+   $SHARE_DIR/bin/share-cli.sh fetch -o /path/to/dir "exact title or unique part"
    ```
 5. Report the saved file path
 
 ## Examples
 
 User: "fetch the cookie recipe from share"
-→ First: `$SHARE_DIR/bin/personal-fetch.sh --list --type note`
-→ Find the recipe, then: `$SHARE_DIR/bin/personal-fetch.sh "cookie recipe"`
+→ First: `$SHARE_DIR/bin/share-cli.sh list --type note`
+→ Find the recipe, then: `$SHARE_DIR/bin/share-cli.sh fetch "cookie recipe"`
 
 User: "download the PDF I shared earlier to /tmp"
-→ First: `$SHARE_DIR/bin/personal-fetch.sh --list --type file`
-→ Then: `$SHARE_DIR/bin/personal-fetch.sh -o /tmp "report.pdf"`
+→ First: `$SHARE_DIR/bin/share-cli.sh list --type file`
+→ Then: `$SHARE_DIR/bin/share-cli.sh fetch -o /tmp "report.pdf"`
 
 User: "/personal-fetch deploy reminder"
-→ `$SHARE_DIR/bin/personal-fetch.sh "deploy reminder"`
+→ `$SHARE_DIR/bin/share-cli.sh fetch "deploy reminder"`

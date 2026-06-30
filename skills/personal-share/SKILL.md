@@ -29,30 +29,30 @@ If no explicit title is given:
 
 ## Implementation
 
-Use the share CLI at the Personal Share project:
+Use the `share` subcommand of the share CLI at the Personal Share project:
 
 ```bash
 # Note with auto-derived title:
-$SHARE_DIR/bin/personal-share.sh "Content here"
+$SHARE_DIR/bin/share-cli.sh share "Content here"
 
 # Note with explicit title:
-$SHARE_DIR/bin/personal-share.sh -t "Title Here" "Content here"
+$SHARE_DIR/bin/share-cli.sh share -t "Title Here" "Content here"
 
 # Note with category:
-$SHARE_DIR/bin/personal-share.sh -c "links" "https://example.com"
+$SHARE_DIR/bin/share-cli.sh share -c "links" "https://example.com"
 
 # File upload:
-$SHARE_DIR/bin/personal-share.sh /path/to/file.pdf
+$SHARE_DIR/bin/share-cli.sh share /path/to/file.pdf
 
 # File upload with category and title:
-$SHARE_DIR/bin/personal-share.sh -c "docs" -t "Manual" /path/to/file.pdf
+$SHARE_DIR/bin/share-cli.sh share -c "docs" -t "Manual" /path/to/file.pdf
 
 # Share a directory (appears in Folders tab):
-$SHARE_DIR/bin/personal-share.sh /path/to/directory
+$SHARE_DIR/bin/share-cli.sh share /path/to/directory
 
 # Multi-line content via pipe:
 echo "line1
-line2" | $SHARE_DIR/bin/personal-share.sh -t "Title"
+line2" | $SHARE_DIR/bin/share-cli.sh share -t "Title"
 ```
 
 The server runs on port 9100 (production). If the user says "test" or you know the test server is running, use `-p 9101`.
@@ -66,19 +66,19 @@ The server runs on port 9100 (production). If the user says "test" or you know t
 ## Examples
 
 User: "share this url to my mobile: https://example.com/article"
-→ `$SHARE_DIR/bin/personal-share.sh "https://example.com/article"`
+→ `$SHARE_DIR/bin/share-cli.sh share "https://example.com/article"`
 
 User: "share this as a note in the links category: https://docs.python.org/3/"
-→ `$SHARE_DIR/bin/personal-share.sh -c "links" "https://docs.python.org/3/"`
+→ `$SHARE_DIR/bin/share-cli.sh share -c "links" "https://docs.python.org/3/"`
 
 User: "/personal-share -c recipes Grandma's cookie recipe: mix flour and sugar"
-→ `$SHARE_DIR/bin/personal-share.sh -c "recipes" "Grandma's cookie recipe: mix flour and sugar"`
+→ `$SHARE_DIR/bin/share-cli.sh share -c "recipes" "Grandma's cookie recipe: mix flour and sugar"`
 
 User: "share this file to my phone: @~/docs/report.pdf"
-→ `$SHARE_DIR/bin/personal-share.sh ~/docs/report.pdf`
+→ `$SHARE_DIR/bin/share-cli.sh share ~/docs/report.pdf`
 
 User: "share this pdf under docs: @/tmp/manual.pdf"
-→ `$SHARE_DIR/bin/personal-share.sh -c "docs" /tmp/manual.pdf`
+→ `$SHARE_DIR/bin/share-cli.sh share -c "docs" /tmp/manual.pdf`
 
 User: "share this folder so I can browse it on my phone: ~/dev/project"
-→ `$SHARE_DIR/bin/personal-share.sh ~/dev/project`
+→ `$SHARE_DIR/bin/share-cli.sh share ~/dev/project`
