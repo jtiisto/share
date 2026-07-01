@@ -61,6 +61,7 @@ plans/
 skills/
   personal-share/    # Claude Code skill for sharing (deployed to ~/.claude/skills/)
   personal-fetch/    # Claude Code skill for fetching (deployed to ~/.claude/skills/)
+  personal-delete/   # Claude Code skill for deleting (deployed to ~/.claude/skills/)
 test/
   conftest.py        # Test fixtures
   unit/test_items.py # Unit/API tests (items, images)

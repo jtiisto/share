@@ -138,6 +138,7 @@ deploy_skill() {
 
 deploy_skill "personal-share"
 deploy_skill "personal-fetch"
+deploy_skill "personal-delete"
 
 echo ""
 

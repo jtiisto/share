@@ -15,7 +15,7 @@ Built as an installable PWA with a FastAPI backend. No cloud services, no accoun
 - **Android share target** — share text, URLs, and files from Android's share menu
 - **File watcher** — drop files into `data/content/` on the server and they appear automatically
 - **CLI tool** — `share-cli.sh` with `share` / `fetch` / `list` / `delete` subcommands for managing items from the terminal
-- **Claude Code skills** — `/personal-share` and `/personal-fetch` for sharing and fetching from Claude Code
+- **Claude Code skills** — `/personal-share`, `/personal-fetch`, and `/personal-delete` for sharing, fetching, and deleting from Claude Code
 
 ## Requirements
 
@@ -114,7 +114,7 @@ removes the file from disk and cleans up the category if it becomes empty.
 
 ## Claude Code Skills
 
-Two [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) are included for sharing and fetching directly from Claude Code conversations.
+Three [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) are included for sharing, fetching, and deleting directly from Claude Code conversations.
 
 ### `/personal-share`
 
@@ -135,7 +135,16 @@ Fetch files or notes from the app to a local directory.
 /personal-fetch cookie recipe
 ```
 
-The skills are deployed to `~/.claude/skills/` by the deploy script, making them available globally in Claude Code. They call the `share-cli.sh` subcommands (`share`, `fetch`, `list`) under the hood.
+### `/personal-delete`
+
+Delete a note or file from the app by title. Confirms the matched item before deleting (no undo).
+
+```
+/personal-delete cookie recipe
+/personal-delete deploy reminder
+```
+
+The skills are deployed to `~/.claude/skills/` by the deploy script, making them available globally in Claude Code. They call the `share-cli.sh` subcommands (`share`, `fetch`, `list`, `delete`) under the hood.
 
 ## File Watcher
 
@@ -298,6 +307,7 @@ data/
 skills/
   personal-share/    # Claude Code skill for sharing
   personal-fetch/    # Claude Code skill for fetching
+  personal-delete/   # Claude Code skill for deleting
 plans/
   REQUIREMENTS.md    # Feature spec and status
 test/
