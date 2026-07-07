@@ -29,7 +29,7 @@ When proposing new work, always update the requirements file first and confirm w
 - **marked** for client-side Markdown rendering
 
 ### Testing
-- **pytest** (unit — 66 tests, 95% coverage)
+- **pytest** (unit — 103 tests, 93% coverage)
 - **Playwright** (E2E browser tests — 10 tests)
 - **httpx** for async test client
 
@@ -66,6 +66,7 @@ test/
   conftest.py        # Test fixtures
   unit/test_items.py # Unit/API tests (items, images)
   unit/test_folders.py # Unit/API tests (shared folders)
+  unit/test_cli.py   # CLI tests (share-cli.sh via subprocess)
   e2e/test_app.py    # Playwright E2E tests (10 tests)
 bin/
   server.sh          # start/stop/restart/status/logs
@@ -104,8 +105,8 @@ pytest test/
 
 The deploy script:
 - Syncs `src/`, `public/`, `bin/` (excluding deploy script itself), and `requirements.txt`
-- Copies the `share-note` skill with paths rewritten to the production directory
-- Symlinks `~/.claude/skills/share-note` to the production copy
+- Prunes legacy CLI scripts (`personal-share.sh`, `personal-fetch.sh`, `share.sh`) from prod `bin/` while preserving prod-only scripts
+- Copies the three `personal-*` skills with `$SHARE_DIR` rewritten to the production directory, and symlinks each into `~/.claude/skills/` (removing the legacy `share-note` skill if present)
 - Preserves `data/` (database and content files are never overwritten)
 
 ## Path-Based Routing

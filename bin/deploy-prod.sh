@@ -31,7 +31,7 @@ fi
 
 PROD_DIR="$1"
 PROD_DIR="${PROD_DIR/#\~/$HOME}"
-PROD_DIR="$(cd "$(dirname "$PROD_DIR")" 2>/dev/null && pwd)/$(basename "$PROD_DIR")" 2>/dev/null || PROD_DIR="$1"
+PROD_DIR="$(cd "$(dirname "$PROD_DIR")" 2>/dev/null && pwd)/$(basename "$PROD_DIR")" || PROD_DIR="${1/#\~/$HOME}"
 
 # Safety: don't deploy to the dev directory
 if [ "$PROD_DIR" = "$PROJECT_ROOT" ]; then
@@ -98,6 +98,16 @@ for script in "$PROJECT_ROOT/bin/"*; do
     fi
 done
 
+# Remove legacy CLI scripts consolidated into share-cli.sh. The bin/ sync is
+# additive (never --delete) so prod-only scripts like setup-tailscale.sh are
+# preserved; obsolete script names must be pruned explicitly.
+for legacy in personal-share.sh personal-fetch.sh share.sh; do
+    if [ -f "$PROD_DIR/bin/$legacy" ]; then
+        echo "  Removing legacy bin script: $legacy"
+        rm -f "$PROD_DIR/bin/$legacy"
+    fi
+done
+
 # Requirements
 copy_file "$PROJECT_ROOT/requirements.txt" "$PROD_DIR/requirements.txt" "requirements.txt"
 
@@ -124,8 +134,14 @@ deploy_skill() {
     if [ ! -d "$src_dir" ]; then return; fi
 
     echo "  Syncing $skill_name skill..."
-    mkdir -p "$prod_dir"
-    sed "s|\$SHARE_DIR|$PROD_DIR|g" "$src_dir/SKILL.md" > "$prod_dir/SKILL.md"
+    mkdir -p "$prod_dir" "$HOME/.claude/skills"
+    # Copy the whole skill dir (any auxiliary files), then rewrite SKILL.md's
+    # $SHARE_DIR placeholder to the prod path. The replacement is escaped so a
+    # path containing sed-special chars (& | \) can't corrupt the output.
+    rsync -a --delete "$src_dir/" "$prod_dir/"
+    local prod_esc
+    prod_esc=$(printf '%s' "$PROD_DIR" | sed -e 's/[&|\\]/\\&/g')
+    sed "s|\$SHARE_DIR|$prod_esc|g" "$src_dir/SKILL.md" > "$prod_dir/SKILL.md"
 
     if [ -L "$link_dir" ]; then
         rm "$link_dir"

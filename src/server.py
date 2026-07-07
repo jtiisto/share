@@ -252,12 +252,17 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.test:
+        import os
         from config import DATA_DIR, TEST_PORT
         import database
 
-        test_db = DATA_DIR / "test_share.db"
-        test_content = DATA_DIR / "test_content"
-        test_folders = DATA_DIR / "test_folders"
+        # Paths default to data/test_*; override via env for isolated harnesses
+        # (e.g. the CLI test suite points these at a temp dir on an ephemeral port).
+        test_db = Path(os.environ.get("SHARE_TEST_DB") or (DATA_DIR / "test_share.db"))
+        test_content = Path(os.environ.get("SHARE_TEST_CONTENT") or (DATA_DIR / "test_content"))
+        test_folders = Path(os.environ.get("SHARE_TEST_FOLDERS") or (DATA_DIR / "test_folders"))
+        test_content.mkdir(parents=True, exist_ok=True)
+        test_folders.mkdir(parents=True, exist_ok=True)
 
         # Point config at test paths
         import config
@@ -281,9 +286,10 @@ if __name__ == "__main__":
 
         database.set_db_path(test_db)
 
-        # Seed test data
-        from seed_test_data import seed
-        seed()
+        # Seed test data (skip with SHARE_TEST_SEED=0 for a clean, empty instance)
+        if os.environ.get("SHARE_TEST_SEED", "1") != "0":
+            from seed_test_data import seed
+            seed()
 
         port = args.port or TEST_PORT
         print(f"\n=== TEST MODE — port {port}, db: {test_db}, content: {test_content} ===\n")

@@ -221,7 +221,7 @@ Deploy to a production directory (separate from development):
 ./bin/deploy-prod.sh /path/to/production/share
 ```
 
-This syncs application files without touching `data/` — your database and content files are preserved. It also deploys the Claude Code skill with paths rewritten for the production location.
+This syncs application files without touching `data/` — your database and content files are preserved. It also deploys the three Claude Code skills with paths rewritten for the production location.
 
 First-time production setup:
 
@@ -239,7 +239,7 @@ pip install -r requirements.txt
 # All tests (unit + E2E)
 pytest test/
 
-# Unit tests only (66 tests, 95% coverage)
+# Unit tests only (103 tests, 93% coverage)
 pytest test/unit/
 
 # E2E browser tests (requires: pip install pytest-playwright && playwright install chromium)
@@ -280,6 +280,12 @@ This starts on port 9101 with a separate database and content directory. Product
 | POST | `/api/sync/pull` | Pull items since timestamp |
 | POST | `/api/sync/push` | Push items (last-write-wins) |
 | POST | `/api/share` | Share target endpoint (multipart) |
+| POST | `/api/folders` | Share a folder (symlink + DB entry) |
+| GET | `/api/folders` | List shared folders |
+| GET | `/api/folders/{name}` | List files in a shared folder |
+| GET | `/api/folders/{name}/files/{filename}` | Download a file from a shared folder |
+| GET | `/api/folders/{name}/files/{filename}/render` | Render a shared-folder file inline |
+| DELETE | `/api/folders/{name}` | Unshare a folder (removes symlink only) |
 | WS | `/ws` | Real-time notifications |
 
 All endpoints are accessed via the `/share` prefix from the browser (e.g., `/share/api/items`). The server middleware strips this prefix so route handlers use unprefixed paths.
@@ -299,11 +305,13 @@ src/
   database.py        # SQLite schema, CRUD operations
   modules/
     items.py         # API routes: items, categories, sync, share
-    watcher.py       # Filesystem watcher with debounce
+    folders.py       # API routes: shared folder browsing
+    watcher.py       # Filesystem watcher with debounce (content + folders)
 public/              # Frontend SPA (served as static files)
 data/
   share.db           # SQLite database (created on first run)
   content/           # Watched directory (subdirs = categories)
+  folders/           # Symlinks to shared directories
 skills/
   personal-share/    # Claude Code skill for sharing
   personal-fetch/    # Claude Code skill for fetching
