@@ -5,7 +5,23 @@
 //   app shell   -> network-first with cache fallback
 
 const CACHE_VERSION = '$SERVER_VERSION$';
-const CDN_CACHE = 'share-cdn-v1';
+
+// Cache Storage is ORIGIN-global, and this origin also hosts the Wellness
+// app (/wellness/). Names are therefore app-prefixed, and activation must
+// never touch a sibling's caches — the old delete-everything-but-mine
+// cleanup wiped Wellness's offline cache on every Share deploy (and vice
+// versa; codex review 2026-07-09, fixed in both apps).
+const CACHE_NAME = `share-${CACHE_VERSION}`;
+const CDN_CACHE = 'share-cdn-v1';   // deploy-stable, kept across versions
+const FOREIGN_PREFIXES = ['wellness-'];  // sibling apps' cache namespaces
+
+// Delete stale share- caches AND legacy bare-version names from the
+// pre-prefix era; preserve the deploy-stable CDN cache and anything in a
+// known foreign namespace.
+function shouldDeleteCache(name) {
+  if (name === CACHE_NAME || name === CDN_CACHE) return false;
+  return !FOREIGN_PREFIXES.some((p) => name.startsWith(p));
+}
 const SHARE_QUEUE_STORE = 'share-offline-queue';
 const B = '$BASE_PATH$';
 
@@ -100,7 +116,7 @@ async function drainShareQueue() {
 self.addEventListener('install', (event) => {
   event.waitUntil(
     Promise.all([
-      caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL_URLS)),
+      caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL_URLS)),
       caches.open(CDN_CACHE).then((cache) => cache.addAll(CDN_URLS)),
     ]).then(() => self.skipWaiting())
   );
@@ -110,12 +126,11 @@ self.addEventListener('install', (event) => {
 // Activate
 // ---------------------------------------------------------------------------
 self.addEventListener('activate', (event) => {
-  const keepCaches = new Set([CACHE_VERSION, CDN_CACHE]);
   event.waitUntil(
     caches.keys().then((cacheNames) =>
       Promise.all(
         cacheNames
-          .filter((name) => !keepCaches.has(name))
+          .filter(shouldDeleteCache)
           .map((name) => caches.delete(name))
       )
     ).then(() => self.clients.claim())
@@ -268,7 +283,7 @@ async function cacheFirstCDN(request) {
 // Network-first for app shell
 // ---------------------------------------------------------------------------
 async function networkFirstAppShell(request) {
-  const cache = await caches.open(CACHE_VERSION);
+  const cache = await caches.open(CACHE_NAME);
 
   try {
     const response = await fetch(request);
