@@ -3,7 +3,10 @@ Personal Share - FastAPI server
 Serves the SPA, mounts API routes, manages WebSocket connections and file watcher.
 """
 import asyncio
+import ipaddress
 import json
+import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -15,6 +18,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from config import PUBLIC_DIR, CONTENT_DIR, FOLDERS_DIR, BASE_PATH
 from database import init_database
 
+
+logger = logging.getLogger("share.server")
 
 SERVER_VERSION = uuid.uuid4().hex[:8]
 
@@ -86,13 +91,80 @@ async def lifespan(app):
 
 _inner_app = FastAPI(title="Personal Share", lifespan=lifespan)
 
-_inner_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+
+# The server binds 0.0.0.0 (Tailscale + loopback are the intended ingress),
+# which also exposes the port on any LAN the host joins. There is no auth
+# layer — Tailscale IS the auth — so the app itself refuses clients outside
+# the trusted source ranges (mirrors the wellness client-guard upgrade,
+# codex review 2026-07-09 P1). Loopback covers dev, tests, and
+# `tailscale serve` (which proxies from 127.0.0.1); the CGNAT and ULA
+# ranges cover direct tailnet connections over v4/v6.
+TRUSTED_CLIENTS_DEFAULT = (
+    "127.0.0.0/8",
+    "::1/128",
+    "100.64.0.0/10",          # Tailscale CGNAT (IPv4 tailnet addresses)
+    "fd7a:115c:a1e0::/48",    # Tailscale ULA (IPv6 tailnet addresses)
 )
+
+
+def _trusted_networks():
+    """Trusted client CIDRs: SHARE_TRUSTED_CLIENTS (comma-separated)
+    REPLACES the default set; the single value "*" disables the guard
+    entirely. Invalid CIDRs fail loudly at startup — a silently-ignored typo
+    here would either lock every client out or quietly open the door."""
+    raw = os.environ.get("SHARE_TRUSTED_CLIENTS", "").strip()
+    if raw == "*":
+        return None  # guard disabled
+    cidrs = ([c.strip() for c in raw.split(",") if c.strip()]
+             if raw else TRUSTED_CLIENTS_DEFAULT)
+    return [ipaddress.ip_network(c) for c in cidrs]
+
+
+def _cors_origins():
+    """CORS is off unless SHARE_CORS_ORIGINS explicitly allowlists origins —
+    the app is same-origin behind Tailscale serve, and a wildcard grant would
+    let any website the browser visits read API responses off the tailnet."""
+    raw = os.environ.get("SHARE_CORS_ORIGINS", "").strip()
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
+class ClientGuardMiddleware:
+    """Reject requests whose source address is outside the trusted ranges —
+    403 for HTTP, pre-accept close (1008) for WebSocket handshakes so
+    untrusted clients can't receive item broadcasts. A missing or non-IP
+    `scope["client"]` — the synthetic "testclient" of Starlette's TestClient,
+    or ASGI servers that omit the field — passes: real uvicorn always
+    supplies the peer IP, so the guard binds exactly to real network
+    exposure."""
+
+    def __init__(self, app, networks):
+        self.app = app
+        self.networks = networks
+
+    async def __call__(self, scope, receive, send):
+        if self.networks is not None and scope["type"] in ("http", "websocket"):
+            client = scope.get("client")
+            if client:
+                try:
+                    ip = ipaddress.ip_address(client[0])
+                except ValueError:
+                    ip = None  # synthetic client (tests) — not a network peer
+                if ip is not None and not any(ip in n for n in self.networks):
+                    logger.warning("Rejected untrusted client %s", client[0])
+                    if scope["type"] == "websocket":
+                        await receive()  # websocket.connect
+                        await send({"type": "websocket.close", "code": 1008})
+                        return
+                    await send({
+                        "type": "http.response.start", "status": 403,
+                        "headers": [(b"content-type", b"application/json")],
+                    })
+                    await send({
+                        "type": "http.response.body",
+                        "body": b'{"detail":"Client address not trusted"}',
+                    })
+                    return
+        await self.app(scope, receive, send)
 
 
 class StripPrefixMiddleware:
@@ -120,7 +192,26 @@ class StripPrefixMiddleware:
         await self.app(scope, receive, send)
 
 
-app = StripPrefixMiddleware(_inner_app, BASE_PATH)
+def create_app():
+    """ASGI stack: client guard → prefix strip → CORS (opt-in) → FastAPI.
+
+    A factory so tests can rebuild the stack after changing the
+    SHARE_TRUSTED_CLIENTS / SHARE_CORS_ORIGINS environment."""
+    asgi = _inner_app
+    origins = _cors_origins()
+    if origins:
+        asgi = CORSMiddleware(
+            asgi,
+            allow_origins=origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    return ClientGuardMiddleware(
+        StripPrefixMiddleware(asgi, BASE_PATH), _trusted_networks())
+
+
+app = create_app()
 
 
 # ==================== API Routes ====================

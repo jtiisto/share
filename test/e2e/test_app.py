@@ -98,7 +98,7 @@ class TestAppShell:
     def test_has_bottom_nav(self, page):
         nav = page.locator(".nav-bar")
         expect(nav).to_be_visible()
-        expect(page.locator(".nav-btn")).to_have_count(2)
+        expect(page.locator(".nav-btn")).to_have_count(3)  # Files, Notes, Folders
 
     def test_nav_switching(self, page):
         # Start on files

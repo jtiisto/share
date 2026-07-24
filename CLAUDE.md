@@ -29,7 +29,7 @@ When proposing new work, always update the requirements file first and confirm w
 - **marked** for client-side Markdown rendering
 
 ### Testing
-- **pytest** (unit — 103 tests, 93% coverage)
+- **pytest** (unit — 120 tests, 94% coverage)
 - **Playwright** (E2E browser tests — 10 tests)
 - **httpx** for async test client
 
@@ -89,6 +89,7 @@ pytest test/
 
 ## Key Conventions
 - Port 9100 (wellness uses 9000)
+- Client-IP guard: the server binds 0.0.0.0 with Tailscale as the auth layer, so the app refuses clients outside loopback + tailnet ranges (403 for HTTP, pre-accept close for WebSocket). `SHARE_TRUSTED_CLIENTS` (comma-separated CIDRs) replaces the defaults, `*` disables. CORS is off by default; `SHARE_CORS_ORIGINS` allowlists origins. Mirrors the wellness client guard.
 - Database at `data/share.db`
 - Content files at `data/content/` — subdirectories map to categories
 - Empty categories are auto-deleted when their last live item is removed or recategorized

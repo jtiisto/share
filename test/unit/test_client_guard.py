@@ -1,0 +1,190 @@
+"""Client-IP guard + CORS allowlist (mirrors the wellness upgrade, codex
+review 2026-07-09 P1).
+
+The server binds 0.0.0.0 with Tailscale as the auth layer; the guard makes
+the app itself refuse sources outside loopback + tailnet ranges — 403 for
+HTTP, pre-accept close for WebSocket handshakes — and CORS is off unless a
+deployment explicitly allowlists origins.
+"""
+import asyncio
+import ipaddress
+import json
+import threading
+from types import SimpleNamespace
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+def _run_asgi(app, scope, receive, send):
+    """Drive the ASGI app synchronously in a dedicated thread with its own
+    event loop — `async def` tests break with "Runner.run() cannot be called
+    from a running event loop" once pytest-playwright has run in the session,
+    so these tests must not touch pytest-asyncio at all (same pattern as the
+    wellness client-guard suite)."""
+    error = {}
+
+    def _runner():
+        try:
+            asyncio.run(app(scope, receive, send))
+        except BaseException as exc:  # surface the failure in the caller
+            error["exc"] = exc
+
+    thread = threading.Thread(target=_runner)
+    thread.start()
+    thread.join()
+    if "exc" in error:
+        raise error["exc"]
+
+
+def _asgi_get(app, client_addr, path="/api/items"):
+    scope = {"type": "http", "http_version": "1.1", "method": "GET",
+             "path": path, "raw_path": path.encode(), "query_string": b"",
+             "headers": [], "scheme": "http", "server": ("test", 80),
+             "client": client_addr}
+    status = {}
+    resp_headers = {}
+    body = bytearray()
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(ev):
+        if ev["type"] == "http.response.start":
+            status["code"] = ev["status"]
+            for k, v in ev.get("headers", []):
+                resp_headers[k.decode().lower()] = v.decode()
+        elif ev["type"] == "http.response.body":
+            body.extend(ev.get("body", b""))
+
+    _run_asgi(app, scope, receive, send)
+    return SimpleNamespace(
+        status_code=status["code"],
+        headers=resp_headers,
+        json=lambda: json.loads(bytes(body)),
+    )
+
+
+def _asgi_ws(app, client_addr, path="/ws"):
+    """Open a WebSocket handshake, then immediately disconnect; returns the
+    events the app sent (accept vs. close decides the guard verdict)."""
+    scope = {"type": "websocket", "path": path, "raw_path": path.encode(),
+             "query_string": b"", "headers": [], "scheme": "ws",
+             "server": ("test", 80), "client": client_addr,
+             "subprotocols": []}
+    messages = [{"type": "websocket.connect"},
+                {"type": "websocket.disconnect", "code": 1000}]
+    events = []
+
+    async def receive():
+        if messages:
+            return messages.pop(0)
+        return {"type": "websocket.disconnect", "code": 1000}
+
+    async def send(ev):
+        events.append(ev)
+
+    _run_asgi(app, scope, receive, send)
+    return events
+
+
+@pytest.mark.unit
+class TestTrustedNetworks:
+    def test_default_set(self, monkeypatch):
+        from server import _trusted_networks
+        monkeypatch.delenv("SHARE_TRUSTED_CLIENTS", raising=False)
+        nets = _trusted_networks()
+        assert ipaddress.ip_network("100.64.0.0/10") in nets
+        assert ipaddress.ip_network("127.0.0.0/8") in nets
+
+    def test_env_replaces_defaults(self, monkeypatch):
+        from server import _trusted_networks
+        monkeypatch.setenv("SHARE_TRUSTED_CLIENTS", "10.0.0.0/8, 192.168.1.0/24")
+        nets = _trusted_networks()
+        assert nets == [ipaddress.ip_network("10.0.0.0/8"),
+                        ipaddress.ip_network("192.168.1.0/24")]
+
+    def test_star_disables(self, monkeypatch):
+        from server import _trusted_networks
+        monkeypatch.setenv("SHARE_TRUSTED_CLIENTS", "*")
+        assert _trusted_networks() is None
+
+    def test_invalid_cidr_fails_loudly(self, monkeypatch):
+        from server import _trusted_networks
+        monkeypatch.setenv("SHARE_TRUSTED_CLIENTS", "not-a-network")
+        with pytest.raises(ValueError):
+            _trusted_networks()
+
+
+@pytest.mark.integration
+class TestClientGuard:
+    def test_lan_client_rejected(self, test_app):
+        r = _asgi_get(test_app, ("192.168.1.50", 1234))
+        assert r.status_code == 403
+        assert r.json() == {"detail": "Client address not trusted"}
+
+    def test_tailnet_client_allowed(self, test_app):
+        assert _asgi_get(test_app, ("100.68.200.116", 1234)).status_code == 200
+
+    def test_loopback_allowed(self, test_app):
+        assert _asgi_get(test_app, ("127.0.0.1", 1234)).status_code == 200
+
+    def test_tailscale_ipv6_ula_allowed(self, test_app):
+        assert _asgi_get(test_app, ("fd7a:115c:a1e0::ab12", 1234)).status_code == 200
+
+    def test_public_internet_rejected(self, test_app):
+        assert _asgi_get(test_app, ("203.0.113.9", 1234)).status_code == 403
+
+    def test_synthetic_test_client_allowed(self, test_app):
+        # Starlette's TestClient presents client=("testclient", 50000) — not a
+        # network peer; the whole suite depends on it passing.
+        with TestClient(test_app) as c:
+            assert c.get("/api/items").status_code == 200
+
+    def test_star_env_disables_guard(self, test_app, monkeypatch):
+        monkeypatch.setenv("SHARE_TRUSTED_CLIENTS", "*")
+        import server as server_mod
+        app = server_mod.create_app()
+        assert _asgi_get(app, ("192.168.1.50", 1234)).status_code == 200
+
+    def test_custom_ranges_replace_defaults(self, test_app, monkeypatch):
+        monkeypatch.setenv("SHARE_TRUSTED_CLIENTS", "10.0.0.0/8")
+        import server as server_mod
+        app = server_mod.create_app()
+        assert _asgi_get(app, ("10.1.2.3", 1234)).status_code == 200
+        assert _asgi_get(app, ("100.68.200.116", 1234)).status_code == 403
+
+
+@pytest.mark.integration
+class TestWebSocketGuard:
+    def test_lan_ws_handshake_rejected(self, test_app):
+        events = _asgi_ws(test_app, ("192.168.1.50", 1234))
+        assert events == [{"type": "websocket.close", "code": 1008}]
+
+    def test_tailnet_ws_handshake_accepted(self, test_app):
+        events = _asgi_ws(test_app, ("100.68.200.116", 1234))
+        assert events[0]["type"] == "websocket.accept"
+
+    def test_loopback_ws_handshake_accepted(self, test_app):
+        events = _asgi_ws(test_app, ("127.0.0.1", 1234))
+        assert events[0]["type"] == "websocket.accept"
+
+
+@pytest.mark.integration
+class TestCorsAllowlist:
+    def test_no_cors_by_default(self, test_app):
+        # No wildcard: a foreign origin gets no CORS grant, so a browser
+        # page on another origin cannot read responses.
+        r = TestClient(test_app).get(
+            "/api/items", headers={"Origin": "https://evil.example"})
+        assert "access-control-allow-origin" not in r.headers
+
+    def test_env_allowlists_origin(self, test_app, monkeypatch):
+        monkeypatch.setenv("SHARE_CORS_ORIGINS", "https://ok.example")
+        import server as server_mod
+        app = server_mod.create_app()
+        c = TestClient(app)
+        ok = c.get("/api/items", headers={"Origin": "https://ok.example"})
+        evil = c.get("/api/items", headers={"Origin": "https://evil.example"})
+        assert ok.headers.get("access-control-allow-origin") == "https://ok.example"
+        assert "access-control-allow-origin" not in evil.headers
