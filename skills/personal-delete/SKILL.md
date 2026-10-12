@@ -7,7 +7,7 @@ allowed-tools: Bash($SHARE_DIR/bin/share-cli.sh:*)
 
 # Personal Delete Skill
 
-Delete a note or file from the Personal Share app. The item is matched by partial title and removed via the API; the change appears on all connected devices in real-time. **There is no undo** — always show the matched item and wait for the user's explicit confirmation before deleting.
+Delete a note or file from the Personal Share app. The server may be on another machine. The item is matched by partial title and removed via the API; the change appears on all connected devices in real-time. **There is no undo** — always show the matched item and wait for the user's explicit confirmation before deleting.
 
 ## How to use
 
@@ -18,7 +18,7 @@ The user describes the item to delete — by title, description, or type. Identi
 Arguments are parsed as: `/personal-delete [search term or description]`
 
 Optional:
-- `-p 9101` — target the test server instead of production
+- `--url http://localhost:9101` — target a local test server instead of the default
 
 ## Implementation
 
@@ -32,7 +32,7 @@ $SHARE_DIR/bin/share-cli.sh list
 $SHARE_DIR/bin/share-cli.sh delete "search term"
 ```
 
-The server runs on port 9100 (production). If the user says "test" or you know the test server is running, use `-p 9101`.
+The server location comes from `$SHARE_URL` when it is non-empty (a remote client), otherwise `http://localhost:9100`. Pass `--url http://localhost:9101` only when the user says "test" or you know a local test server is running. There is no port flag.
 
 `delete` matches on partial title. If the term matches zero or multiple items it prints the matches and aborts without deleting anything, so a specific term is required to remove exactly one item.
 
@@ -53,7 +53,7 @@ The server runs on port 9100 (production). If the user says "test" or you know t
 
 ## Scope & limits
 
-- Deletes **notes and files only**. It cannot remove **shared folders** (the Folders tab / `data/folders/` symlinks). If the user asks to delete or unshare a *folder*, tell them to unshare it from the app's Folders tab.
+- Deletes **notes and files only**; the app has no folders.
 - Only ever run the `share-cli.sh` commands documented in this skill. Never construct other shell commands (e.g. a raw `curl -X DELETE …`) to accomplish a deletion — if `share-cli.sh` can't do it, stop and tell the user.
 
 ## Examples
@@ -66,6 +66,3 @@ User: "delete the cookie recipe from share"
 User: "remove that PDF I shared earlier"
 → `$SHARE_DIR/bin/share-cli.sh list --type file`, identify it, show it and wait for confirmation, then:
   `$SHARE_DIR/bin/share-cli.sh delete "report.pdf"`
-
-User: "delete the folder I shared"
-→ This skill can't delete folders. Tell the user to unshare it from the app's Folders tab; do not run any API/curl command.

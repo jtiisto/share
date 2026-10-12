@@ -25,14 +25,7 @@ def tmp_content_dir(tmp_path):
 
 
 @pytest.fixture(scope="function")
-def tmp_folders_dir(tmp_path):
-    folders = tmp_path / "folders"
-    folders.mkdir()
-    return folders
-
-
-@pytest.fixture(scope="function")
-def test_app(tmp_path, tmp_db, tmp_content_dir, tmp_folders_dir, monkeypatch):
+def test_app(tmp_path, tmp_db, tmp_content_dir, monkeypatch):
     # Create minimal public directory
     public_dir = tmp_path / "public"
     public_dir.mkdir()
@@ -70,7 +63,6 @@ def test_app(tmp_path, tmp_db, tmp_content_dir, tmp_folders_dir, monkeypatch):
     import config
     monkeypatch.setattr(config, "PUBLIC_DIR", public_dir)
     monkeypatch.setattr(config, "CONTENT_DIR", tmp_content_dir)
-    monkeypatch.setattr(config, "FOLDERS_DIR", tmp_folders_dir)
     monkeypatch.setattr(config, "DB_PATH", tmp_db)
 
     import database
@@ -83,10 +75,6 @@ def test_app(tmp_path, tmp_db, tmp_content_dir, tmp_folders_dir, monkeypatch):
     # Patch CONTENT_DIR in items module (captured at import time)
     import modules.items as items_mod
     monkeypatch.setattr(items_mod, "CONTENT_DIR", tmp_content_dir)
-
-    # Patch FOLDERS_DIR in folders module
-    import modules.folders as folders_mod
-    monkeypatch.setattr(folders_mod, "FOLDERS_DIR", tmp_folders_dir)
 
     yield server.app
 

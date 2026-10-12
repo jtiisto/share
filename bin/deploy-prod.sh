@@ -165,9 +165,7 @@ echo -e "${GREEN}Ensuring data directory structure...${NC}"
 # Create data/ and data/content/ if they don't exist
 # NEVER delete or overwrite anything under data/
 mkdir -p "$PROD_DIR/data/content"
-mkdir -p "$PROD_DIR/data/folders"
 echo "  data/content/ ready"
-echo "  data/folders/ ready"
 
 # Verify nothing was touched
 if [ -f "$PROD_DIR/data/share.db" ]; then
@@ -177,11 +175,6 @@ fi
 content_count=$(find "$PROD_DIR/data/content" -type f 2>/dev/null | wc -l)
 if [ "$content_count" -gt 0 ]; then
     echo -e "  ${YELLOW}Existing content preserved: $content_count files in data/content/${NC}"
-fi
-
-folder_count=$(find "$PROD_DIR/data/folders" -maxdepth 1 -type l 2>/dev/null | wc -l)
-if [ "$folder_count" -gt 0 ]; then
-    echo -e "  ${YELLOW}Existing folder links preserved: $folder_count symlinks in data/folders/${NC}"
 fi
 
 echo ""

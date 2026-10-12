@@ -25,7 +25,6 @@ export const dirtyCount = signal(0);
 export const selectedCategory = signal(null);
 export const selectedNoteCategory = signal(null);
 export const viewingItem = signal(null);
-export const folders = signal([]);
 
 // ==================== API Helpers ====================
 
@@ -226,32 +225,6 @@ export async function deleteCategory(name) {
     }
 }
 
-// ==================== Shared Folders ====================
-
-export async function loadFolders() {
-    const data = await apiFetch('/folders');
-    folders.value = data;
-    return data;
-}
-
-export async function shareFolder(targetPath) {
-    const folder = await apiFetch('/folders', {
-        method: 'POST',
-        body: JSON.stringify({ target_path: targetPath }),
-    });
-    folders.value = [folder, ...folders.value];
-    return folder;
-}
-
-export async function unshareFolder(name) {
-    await apiFetch(`/folders/${encodeURIComponent(name)}`, { method: 'DELETE' });
-    folders.value = folders.value.filter(f => f.name !== name);
-}
-
-export async function loadFolderFiles(name) {
-    return apiFetch(`/folders/${encodeURIComponent(name)}`);
-}
-
 // ==================== Sync ====================
 
 async function pushDirtyItems() {
@@ -341,14 +314,7 @@ function connectWebSocket() {
             const msg = JSON.parse(event.data);
             if (msg.event === 'pong') return;
 
-            if (msg.event === 'folder:created') {
-                const existing = folders.value.find(f => f.name === msg.data.name);
-                if (!existing) {
-                    folders.value = [msg.data, ...folders.value];
-                }
-            } else if (msg.event === 'folder:deleted') {
-                folders.value = folders.value.filter(f => f.name !== msg.data.name);
-            } else if (msg.event === 'item:created') {
+            if (msg.event === 'item:created') {
                 const existing = items.value.find(i => i.id === msg.data.id);
                 if (!existing) {
                     items.value = [msg.data, ...items.value];

@@ -3,17 +3,21 @@
 #
 # Usage: share-cli <command> [options] [args]
 #
-#   share    Create a note, upload a file, or share a directory
+#   share    Create a note or upload a file
 #   fetch    Download an item to a local directory       (alias: get)
 #   list     List items                                  (alias: ls)
 #   delete   Delete an item by partial title match       (alias: rm)
 #   help     Show usage (also: -h, --help)
 #
-# Every command accepts -p/--port PORT (default 9100, or $SHARE_PORT).
+# Every command accepts --url BASE_URL, the server's scheme://host[:port]
+# (default $SHARE_URL, else http://localhost:9100). Client and server may be
+# different machines; the CLI needs only bash, curl, and python3.
 # Run `share-cli <command> --help` for command-specific options.
 
-PORT=${SHARE_PORT:-9100}
-API=""   # resolved from $PORT by set_api
+DEFAULT_URL="http://localhost:9100"
+URL_FLAG=""   # --url, set by the command parsers (beats $SHARE_URL)
+BASE_URL=""   # resolved by resolve_api
+API=""        # $BASE_URL/share/api
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -24,12 +28,22 @@ NC='\033[0m'
 # transport errors still surface (captured into the response for HTTP-code checks).
 CURL_OPTS=(-sS --connect-timeout 3 --max-time 60)
 
-set_api() {
-    if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}Invalid port: $PORT${NC}" >&2
+# Resolve the server base URL: --url flag > $SHARE_URL > default. Accepts
+# scheme://host[:port] only — hostname, IPv4, or bracketed IPv6 host and a
+# numeric port. No path (the CLI appends /share/api itself, so one would
+# double up), no query, fragment, or credentials. One trailing slash is
+# tolerated. The pattern lives in a variable: bash's =~ mangles a quoted
+# regex and a bare one trips over the brackets.
+URL_RE='^https?://([A-Za-z0-9._-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?$'
+resolve_api() {
+    local base="${URL_FLAG:-${SHARE_URL:-$DEFAULT_URL}}"
+    base="${base%/}"
+    if ! [[ "$base" =~ $URL_RE ]]; then
+        echo -e "${RED}Invalid server URL: $base (expected http(s)://host[:port], no path)${NC}" >&2
         exit 2
     fi
-    API="http://localhost:$PORT/share/api"
+    BASE_URL="$base"
+    API="$BASE_URL/share/api"
 }
 
 # ==================== Shared helpers ====================
@@ -83,7 +97,7 @@ unique_path() {
 #   zero/multiple/error: prints a message to stderr, returns 1
 resolve_single_match() {
     local term="$1" items matches count
-    items=$(fetch_items) || { echo -e "${RED}Error: cannot reach Personal Share server on port $PORT${NC}" >&2; return 1; }
+    items=$(fetch_items) || { echo -e "${RED}Error: cannot reach Personal Share server at $BASE_URL${NC}" >&2; return 1; }
     if [ -z "$items" ] || [ "$items" = "[]" ]; then
         echo -e "${RED}Error: No items found on server${NC}" >&2
         return 1
@@ -128,15 +142,15 @@ for item in json.load(sys.stdin):
 
 usage_share() {
     cat <<EOF
-Usage: share-cli share [options] <content | file | directory>
+Usage: share-cli share [options] <content | file>
        echo "text" | share-cli share [options]
 
-Create a note, upload a file, or share a directory.
+Create a note or upload a file. Directories cannot be shared.
 
 Options:
   -t, --title "Title"      Explicit title (default: auto-derived)
   -c, --category "name"    Assign to a category
-  -p, --port PORT          Server port (default: 9100)
+  --url BASE_URL           Server base URL (default: \$SHARE_URL, else http://localhost:9100)
   -h, --help               Show this help
 
 Pipe input always creates a note, even if it looks like a file path.
@@ -149,20 +163,23 @@ cmd_share() {
         case "$1" in
             -t|--title) [[ $# -ge 2 ]] || { echo -e "${RED}Option $1 requires a value${NC}" >&2; return 1; }; TITLE="$2"; shift 2 ;;
             -c|--category) [[ $# -ge 2 ]] || { echo -e "${RED}Option $1 requires a value${NC}" >&2; return 1; }; CATEGORY="$2"; shift 2 ;;
-            -p|--port) [[ $# -ge 2 ]] || { echo -e "${RED}Option $1 requires a value${NC}" >&2; return 1; }; PORT="$2"; shift 2 ;;
+            --url) [[ $# -ge 2 && -n "$2" ]] || { echo -e "${RED}Option $1 requires a non-empty value${NC}" >&2; return 1; }; URL_FLAG="$2"; shift 2 ;;
             -h|--help) usage_share; return 0 ;;
             --) shift; break ;;
             -*) echo -e "${RED}Unknown option: $1${NC}" >&2; usage_share >&2; return 1 ;;
             *) break ;;
         esac
     done
-    set_api
+    resolve_api
 
-    # Determine input mode: directory, file, args, or pipe
-    local FILE_PATH="" CONTENT="" DIR_PATH=""
+    # Determine input mode: file, args, or pipe. A directory is refused
+    # outright — the server has no concept of folders and the path would
+    # otherwise be shared as the text of a note.
+    local FILE_PATH="" CONTENT=""
     if [ $# -gt 0 ]; then
         if [ $# -eq 1 ] && [ -d "$1" ]; then
-            DIR_PATH="$(cd "$1" && pwd)"
+            echo -e "${RED}Error: directories cannot be shared — share individual files instead${NC}" >&2
+            return 1
         elif [ $# -eq 1 ] && [ -f "$1" ]; then
             FILE_PATH="$1"
         else
@@ -173,24 +190,6 @@ cmd_share() {
     else
         usage_share >&2
         return 1
-    fi
-
-    # --- Directory sharing ---
-    if [ -n "$DIR_PATH" ]; then
-        local JSON_PATH RESPONSE NAME
-        JSON_PATH=$(json_escape "$DIR_PATH")
-        RESPONSE=$(curl "${CURL_OPTS[@]}" -w "\n%{http_code}" -X POST "$API/folders" \
-            -H "Content-Type: application/json" \
-            -d "{\"target_path\": $JSON_PATH}" 2>&1)
-        split_response "$RESPONSE"
-        if [ "$HTTP_CODE" = "200" ]; then
-            NAME=$(printf '%s' "$HTTP_BODY" | python3 -c 'import sys,json; print(json.load(sys.stdin)["name"])' 2>/dev/null)
-            echo -e "${GREEN}Shared folder:${NC} $DIR_PATH (as $NAME)"
-        else
-            echo -e "${RED}Failed (HTTP $HTTP_CODE):${NC} $HTTP_BODY" >&2
-            return 1
-        fi
-        return 0
     fi
 
     # --- File upload ---
@@ -250,7 +249,7 @@ List recent items (pin marker, type, title, category).
 Options:
   --type note|file         Filter by type
   --category "name"        Filter by category
-  -p, --port PORT          Server port (default: 9100)
+  --url BASE_URL           Server base URL (default: \$SHARE_URL, else http://localhost:9100)
   -h, --help               Show this help
 EOF
 }
@@ -261,15 +260,15 @@ cmd_list() {
         case "$1" in
             --type) [[ $# -ge 2 ]] || { echo -e "${RED}Option $1 requires a value${NC}" >&2; return 1; }; TYPE_FILTER="$2"; shift 2 ;;
             --category) [[ $# -ge 2 ]] || { echo -e "${RED}Option $1 requires a value${NC}" >&2; return 1; }; CATEGORY_FILTER="$2"; shift 2 ;;
-            -p|--port) [[ $# -ge 2 ]] || { echo -e "${RED}Option $1 requires a value${NC}" >&2; return 1; }; PORT="$2"; shift 2 ;;
+            --url) [[ $# -ge 2 && -n "$2" ]] || { echo -e "${RED}Option $1 requires a non-empty value${NC}" >&2; return 1; }; URL_FLAG="$2"; shift 2 ;;
             -h|--help) usage_list; return 0 ;;
             *) echo -e "${RED}Unknown option: $1${NC}" >&2; usage_list >&2; return 1 ;;
         esac
     done
-    set_api
+    resolve_api
 
     local ITEMS
-    ITEMS=$(fetch_items) || { echo -e "${RED}Error: cannot reach Personal Share server on port $PORT${NC}" >&2; return 1; }
+    ITEMS=$(fetch_items) || { echo -e "${RED}Error: cannot reach Personal Share server at $BASE_URL${NC}" >&2; return 1; }
     if [ -z "$ITEMS" ] || [ "$ITEMS" = "[]" ]; then
         echo "No items found."
         return 0
@@ -298,7 +297,7 @@ if zero or multiple items match.
 
 Options:
   -o, --output /path/dir   Output directory (default: current dir)
-  -p, --port PORT          Server port (default: 9100)
+  --url BASE_URL           Server base URL (default: \$SHARE_URL, else http://localhost:9100)
   -h, --help               Show this help
 EOF
 }
@@ -309,14 +308,14 @@ cmd_fetch() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -o|--output) [[ $# -ge 2 ]] || { echo -e "${RED}Option $1 requires a value${NC}" >&2; return 1; }; OUTPUT_DIR="$2"; shift 2 ;;
-            -p|--port) [[ $# -ge 2 ]] || { echo -e "${RED}Option $1 requires a value${NC}" >&2; return 1; }; PORT="$2"; shift 2 ;;
+            --url) [[ $# -ge 2 && -n "$2" ]] || { echo -e "${RED}Option $1 requires a non-empty value${NC}" >&2; return 1; }; URL_FLAG="$2"; shift 2 ;;
             -h|--help) usage_fetch; return 0 ;;
             --) shift; while [[ $# -gt 0 ]]; do POS+=("$1"); shift; done ;;
             -*) echo -e "${RED}Unknown option: $1${NC}" >&2; usage_fetch >&2; return 1 ;;
             *) POS+=("$1"); shift ;;
         esac
     done
-    set_api
+    resolve_api
 
     local SEARCH_TERM="${POS[*]}"
     if [ -z "$SEARCH_TERM" ]; then
@@ -375,7 +374,7 @@ immediately with no confirmation. For file items the server also
 removes the file from disk and cleans up a now-empty category.
 
 Options:
-  -p, --port PORT          Server port (default: 9100)
+  --url BASE_URL           Server base URL (default: \$SHARE_URL, else http://localhost:9100)
   -h, --help               Show this help
 EOF
 }
@@ -385,14 +384,14 @@ cmd_delete() {
     local -a POS=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -p|--port) [[ $# -ge 2 ]] || { echo -e "${RED}Option $1 requires a value${NC}" >&2; return 1; }; PORT="$2"; shift 2 ;;
+            --url) [[ $# -ge 2 && -n "$2" ]] || { echo -e "${RED}Option $1 requires a non-empty value${NC}" >&2; return 1; }; URL_FLAG="$2"; shift 2 ;;
             -h|--help) usage_delete; return 0 ;;
             --) shift; while [[ $# -gt 0 ]]; do POS+=("$1"); shift; done ;;
             -*) echo -e "${RED}Unknown option: $1${NC}" >&2; usage_delete >&2; return 1 ;;
             *) POS+=("$1"); shift ;;
         esac
     done
-    set_api
+    resolve_api
 
     local SEARCH_TERM="${POS[*]}"
     if [ -z "$SEARCH_TERM" ]; then
@@ -429,14 +428,14 @@ share-cli — Personal Share command-line tool
 Usage: share-cli <command> [options] [args]
 
 Commands:
-  share    Create a note, upload a file, or share a directory
+  share    Create a note or upload a file
   fetch    Download an item to a local directory       (alias: get)
   list     List items                                  (alias: ls)
   delete   Delete an item by partial title match       (alias: rm)
   help     Show this help (also: -h, --help)
 
 Global options (accepted by every command):
-  -p, --port PORT   Server port (default: 9100, or \$SHARE_PORT)
+  --url BASE_URL    Server base URL, scheme://host[:port] (default: \$SHARE_URL, else http://localhost:9100)
 
 Run 'share-cli <command> --help' for command-specific options.
 EOF

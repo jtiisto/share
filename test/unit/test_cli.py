@@ -4,7 +4,9 @@ CLI tests for bin/share-cli.sh.
 Drives the real script via subprocess against an isolated, unseeded server on an
 ephemeral port (started with SHARE_TEST_* env overrides). These guard the CLI's
 observable behavior — most importantly that an ambiguous `delete` aborts without
-deleting anything, the safety property the personal-delete skill relies on.
+deleting anything, the safety property the personal-delete skill relies on — and
+the server-location rules (--url flag > $SHARE_URL > localhost default) that let
+the CLI run on a different machine from the server.
 """
 import os
 import shutil
@@ -46,7 +48,6 @@ def cli_server(tmp_path_factory):
     env.update({
         "SHARE_TEST_DB": str(tmp / "cli.db"),
         "SHARE_TEST_CONTENT": str(tmp / "content"),
-        "SHARE_TEST_FOLDERS": str(tmp / "folders"),
         "SHARE_TEST_SEED": "0",        # start empty for deterministic counts
         "PYTHONUTF8": "1",             # locale-independent unicode handling
         "PYTHONIOENCODING": "utf-8",
@@ -83,15 +84,30 @@ def cli_server(tmp_path_factory):
         log.close()
 
 
-def run_cli(port, subcmd, *args, **kwargs):
-    """Run `share-cli.sh <subcmd> -p <port> <args...>`.
+def base_url(port):
+    return f"http://127.0.0.1:{port}"
 
-    -p is placed right after the subcommand so it precedes any positional
+
+def run_raw(argv, env_extra=None, **kwargs):
+    """Run `share-cli.sh <argv...>` verbatim with an optional env overlay.
+
+    $SHARE_URL is scrubbed from the inherited environment so a developer
+    shell that exports it can't leak into the resolution-order assertions.
+    """
+    env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
+    env.pop("SHARE_URL", None)
+    env.update(env_extra or {})
+    cmd = ["bash", str(CLI), *[str(a) for a in argv]]
+    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", env=env, **kwargs)
+
+
+def run_cli(port, subcmd, *args, **kwargs):
+    """Run `share-cli.sh <subcmd> --url http://127.0.0.1:<port> <args...>`.
+
+    --url is placed right after the subcommand so it precedes any positional
     content (the `share` subcommand stops option parsing at the first positional).
     """
-    cmd = ["bash", str(CLI), subcmd, "-p", str(port), *[str(a) for a in args]]
-    env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
-    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", env=env, **kwargs)
+    return run_raw([subcmd, "--url", base_url(port), *args], **kwargs)
 
 
 def listing(port, *extra):
@@ -210,3 +226,108 @@ def test_special_title_survives_escape_roundtrip(cli_server, tmp_path):
     assert md[0].read_text() == content + "\n"
 
     run_cli(port, "delete", "café")
+
+
+# ---------------------------------------------------------------------------
+# Server location: --url flag > $SHARE_URL > http://localhost:9100
+
+
+def test_url_env_round_trip(cli_server, tmp_path):
+    """With no --url flag the CLI follows $SHARE_URL — the remote-client setup."""
+    port = cli_server
+    env = {"SHARE_URL": base_url(port)}
+
+    r = run_raw(["share", "-t", "Env Url Note", "via env"], env_extra=env)
+    assert r.returncode == 0, r.stderr
+    assert "Shared:" in r.stdout
+
+    r = run_raw(["list"], env_extra=env)
+    assert r.returncode == 0, r.stderr
+    assert "Env Url Note" in r.stdout
+
+    out = tmp_path / "env"
+    r = run_raw(["fetch", "-o", str(out), "Env Url Note"], env_extra=env)
+    assert r.returncode == 0, r.stderr
+    assert (out / "Env Url Note.md").read_text() == "via env\n"
+
+    r = run_raw(["delete", "Env Url Note"], env_extra=env)
+    assert r.returncode == 0, r.stderr
+
+
+def test_url_flag_beats_env(cli_server):
+    port = cli_server
+    dead = "http://127.0.0.1:1"  # nothing listens on port 1
+
+    # env points at a dead server, flag at the live one -> flag wins
+    r = run_raw(["list", "--url", base_url(port)], env_extra={"SHARE_URL": dead})
+    assert r.returncode == 0, r.stderr
+
+    # env points at the live server, flag at the dead one -> flag still wins
+    r = run_raw(["list", "--url", dead], env_extra={"SHARE_URL": base_url(port)})
+    assert r.returncode == 1
+    assert f"cannot reach Personal Share server at {dead}" in r.stderr
+
+
+def test_trailing_slash_tolerated(cli_server):
+    r = run_raw(["list", "--url", base_url(cli_server) + "/"])
+    assert r.returncode == 0, r.stderr
+
+
+@pytest.mark.parametrize("bad", [
+    "127.0.0.1:9100",                 # no scheme
+    "ftp://127.0.0.1:9100",           # wrong scheme
+    "http://127.0.0.1:9100/share",    # path component (CLI appends /share/api itself)
+    "http://127.0.0.1:9100//",        # more than one trailing slash
+    "http://127.0.0.1:9100?x=y",      # query string
+    "http://127.0.0.1:9100#frag",     # fragment
+    "http://:9100",                   # missing host
+    "http://127.0.0.1:abc",           # non-numeric port
+    "http://user:pw@127.0.0.1:9100",  # credentials
+])
+def test_malformed_url_exits_2(bad):
+    r = run_raw(["list", "--url", bad])
+    assert r.returncode == 2
+    assert "Invalid server URL" in r.stderr
+
+    r = run_raw(["list"], env_extra={"SHARE_URL": bad})
+    assert r.returncode == 2
+    assert "Invalid server URL" in r.stderr
+
+
+def test_ipv6_literal_host_accepted():
+    """A bracketed IPv6 host passes validation; the run fails only because
+    nothing listens on [::1]:1, which proves it got as far as curl."""
+    r = run_raw(["list", "--url", "http://[::1]:1"])
+    assert r.returncode == 1
+    assert "Invalid server URL" not in r.stderr
+    assert "cannot reach Personal Share server at http://[::1]:1" in r.stderr
+
+
+def test_empty_url_flag_is_usage_error():
+    """An explicit `--url ""` must not silently fall back to $SHARE_URL — that
+    could send an upload or a delete to a server the user did not name."""
+    r = run_raw(["list", "--url", ""], env_extra={"SHARE_URL": "http://127.0.0.1:1"})
+    assert r.returncode == 1
+    assert "requires a non-empty value" in r.stderr
+    assert "cannot reach" not in r.stderr
+
+
+@pytest.mark.parametrize("flag", ["-p", "--port"])
+@pytest.mark.parametrize("subcmd", ["share", "fetch", "list", "delete"])
+def test_port_flag_rejected(subcmd, flag):
+    """-p/--port was removed with no shim: the port lives in the URL."""
+    r = run_raw([subcmd, flag, "9100", "x"])
+    assert r.returncode != 0
+    assert f"Unknown option: {flag}" in r.stderr
+
+
+def test_directory_argument_rejected(cli_server, tmp_path):
+    """A directory is neither uploaded nor turned into a note whose body is the path."""
+    port = cli_server
+    d = tmp_path / "some_dir_zzz"
+    d.mkdir()
+
+    r = run_cli(port, "share", str(d))
+    assert r.returncode == 1
+    assert "directories cannot be shared" in r.stderr
+    assert "some_dir_zzz" not in listing(port)

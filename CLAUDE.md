@@ -29,7 +29,7 @@ When proposing new work, always update the requirements file first and confirm w
 - **marked** for client-side Markdown rendering
 
 ### Testing
-- **pytest** (unit — 120 tests, 94% coverage)
+- **pytest** (unit — 116 tests, 94% coverage; 95% with e2e)
 - **Playwright** (E2E browser tests — 10 tests)
 - **httpx** for async test client
 
@@ -42,8 +42,7 @@ src/
   database.py        # Schema, CRUD operations
   modules/
     items.py         # API routes: items, categories, sync, share
-    folders.py       # API routes: shared folder browsing
-    watcher.py       # Filesystem watcher with debounce (content + folders)
+    watcher.py       # Filesystem watcher with debounce
 public/
   index.html         # SPA entry point
   styles.css         # Dark theme, mobile-first
@@ -55,7 +54,6 @@ public/
     items/           # View components
 data/
   content/           # Watched directory (subdirs = categories)
-  folders/           # Symlinks to shared directories
 plans/
   REQUIREMENTS.md    # Spec — source of truth for features and status
 skills/
@@ -65,8 +63,7 @@ skills/
 test/
   conftest.py        # Test fixtures
   unit/test_items.py # Unit/API tests (items, images)
-  unit/test_folders.py # Unit/API tests (shared folders)
-  unit/test_cli.py   # CLI tests (share-cli.sh via subprocess)
+  unit/test_cli.py   # CLI tests (share-cli.sh via subprocess, incl. server-URL resolution)
   e2e/test_app.py    # Playwright E2E tests (10 tests)
 bin/
   server.sh          # start/stop/restart/status/logs
@@ -89,6 +86,7 @@ pytest test/
 
 ## Key Conventions
 - Port 9100 (wellness uses 9000)
+- The CLI and skills may run on a different machine from the server. `share-cli.sh` resolves the server as `--url` flag > `$SHARE_URL` > `http://localhost:9100` (scheme, host, optional port, no path) and appends `/share/api`. There is no port flag. No shared-folder feature: the server never links host directories (removed 2026-10-12 for the containerized split)
 - Client-IP guard: the server binds 0.0.0.0 with Tailscale as the auth layer, so the app refuses clients outside loopback + tailnet ranges (403 for HTTP, pre-accept close for WebSocket). `SHARE_TRUSTED_CLIENTS` (comma-separated CIDRs) replaces the defaults, `*` disables. CORS is off by default; `SHARE_CORS_ORIGINS` allowlists origins. Mirrors the wellness client guard.
 - Database at `data/share.db`
 - Content files at `data/content/` — subdirectories map to categories

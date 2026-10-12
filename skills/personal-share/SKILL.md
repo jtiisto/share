@@ -7,7 +7,7 @@ allowed-tools: Bash
 
 # Personal Share Skill
 
-Share a note or file to the Personal Share app running on the server. The item will appear on all connected devices (mobile, laptop) in real-time via WebSocket.
+Share a note or file to the Personal Share app. The server may be on another machine; the item will appear on all connected devices (mobile, laptop) in real-time via WebSocket.
 
 ## How to use
 
@@ -24,7 +24,6 @@ Optional flags:
 If no explicit title is given:
 - For URLs: use the domain as the title
 - For files: use the filename
-- For directories: use the directory name
 - For other text: use the first 50 characters
 
 ## Implementation
@@ -47,15 +46,12 @@ $SHARE_DIR/bin/share-cli.sh share /path/to/file.pdf
 # File upload with category and title:
 $SHARE_DIR/bin/share-cli.sh share -c "docs" -t "Manual" /path/to/file.pdf
 
-# Share a directory (appears in Folders tab):
-$SHARE_DIR/bin/share-cli.sh share /path/to/directory
-
 # Multi-line content via pipe:
 echo "line1
 line2" | $SHARE_DIR/bin/share-cli.sh share -t "Title"
 ```
 
-The server runs on port 9100 (production). If the user says "test" or you know the test server is running, use `-p 9101`.
+The server location comes from `$SHARE_URL` when it is non-empty (a remote client), otherwise `http://localhost:9100`. Pass `--url http://localhost:9101` only when the user says "test" or you know a local test server is running. There is no port flag.
 
 ## Steps
 
@@ -81,4 +77,4 @@ User: "share this pdf under docs: @/tmp/manual.pdf"
 → `$SHARE_DIR/bin/share-cli.sh share -c "docs" /tmp/manual.pdf`
 
 User: "share this folder so I can browse it on my phone: ~/dev/project"
-→ `$SHARE_DIR/bin/share-cli.sh share ~/dev/project`
+→ Folders are not supported. Tell the user to share individual files instead; do not run a command.

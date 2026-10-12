@@ -39,7 +39,7 @@ $SHARE_DIR/bin/share-cli.sh fetch "search term"
 $SHARE_DIR/bin/share-cli.sh fetch -o /tmp "search term"
 ```
 
-The server runs on port 9100 (production). If the user says "test" or you know the test server is running, use `-p 9101`.
+The server location comes from `$SHARE_URL` when it is non-empty (a remote client), otherwise `http://localhost:9100`. Pass `--url http://localhost:9101` only when the user says "test" or you know a local test server is running. There is no port flag.
 
 ## Steps
 

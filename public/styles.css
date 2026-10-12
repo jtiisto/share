@@ -683,22 +683,6 @@ body {
 
 .rendered-content a:hover { text-decoration: underline; }
 
-/* ==================== Folder Contents Header ==================== */
-
-.folder-contents-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-bottom: 1px solid var(--border-color);
-}
-
-.folder-contents-title {
-    font-weight: 500;
-    font-size: var(--font-size-md);
-    flex: 1;
-}
-
 /* ==================== Image Viewer ==================== */
 
 .content-viewer-image {

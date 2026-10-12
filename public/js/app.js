@@ -7,7 +7,6 @@ import htm from 'htm';
 import { initStore, syncStatus, isSyncing, dirtyCount, requestSync, viewingItem } from './store.js';
 import { ItemsView } from './items/ItemsView.js';
 import { NotesView } from './items/NotesView.js';
-import { FoldersView, resetFolderView } from './items/FoldersView.js';
 import { AddSheet } from './items/AddSheet.js';
 import { ContentViewer } from './items/ContentViewer.js';
 import { ShareReceiver } from './items/ShareReceiver.js';
@@ -16,7 +15,11 @@ const html = htm.bind(h);
 
 // ==================== State ====================
 
-const activeView = signal(localStorage.getItem('share_active_view') || 'files');
+const VIEWS = ['files', 'notes'];
+const savedView = localStorage.getItem('share_active_view');
+// A persisted view that no longer exists (e.g. 'folders', removed 2026-10-12)
+// falls back to Files instead of rendering with no nav button selected.
+const activeView = signal(VIEWS.includes(savedView) ? savedView : 'files');
 const showAddSheet = signal(false);
 
 // ==================== Icons ====================
@@ -30,9 +33,6 @@ const ICONS = {
         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
     </svg>`,
-    folders: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
-        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-    </svg>`,
     plus: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="24" height="24">
         <line x1="12" y1="5" x2="12" y2="19"/>
         <line x1="5" y1="12" x2="19" y2="12"/>
@@ -40,9 +40,6 @@ const ICONS = {
 };
 
 function selectView(id) {
-    if (activeView.value === 'folders' && id !== 'folders') {
-        resetFolderView();
-    }
     activeView.value = id;
     localStorage.setItem('share_active_view', id);
 }
@@ -74,7 +71,7 @@ function SyncIndicator() {
 }
 
 function Header() {
-    const titles = { files: 'Files', notes: 'Notes', folders: 'Folders' };
+    const titles = { files: 'Files', notes: 'Notes' };
     const title = titles[activeView.value] || 'Files';
     return html`
         <div class="header">
@@ -89,9 +86,6 @@ function Header() {
 function ViewContent() {
     if (activeView.value === 'notes') {
         return html`<${NotesView}/>`;
-    }
-    if (activeView.value === 'folders') {
-        return html`<${FoldersView}/>`;
     }
     return html`<${ItemsView}/>`;
 }
@@ -108,11 +102,6 @@ function NavBar() {
                 onClick=${() => selectView('notes')}>
                 <span class="nav-icon">${ICONS.notes}</span>
                 <span class="nav-label">Notes</span>
-            </button>
-            <button class="nav-btn ${activeView.value === 'folders' ? 'active' : ''}"
-                onClick=${() => selectView('folders')}>
-                <span class="nav-icon">${ICONS.folders}</span>
-                <span class="nav-label">Folders</span>
             </button>
         </nav>
     `;

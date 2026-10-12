@@ -52,9 +52,36 @@ The app is available at `http://localhost:9100/share/`.
 ## Command-Line Tool
 
 All terminal operations run through one dispatcher, `./bin/share-cli.sh <command>`, with
-`share`, `fetch`, `list`, and `delete` subcommands. Every command accepts `-p PORT` (default
-9100, or `$SHARE_PORT`). Run `./bin/share-cli.sh --help`, or `./bin/share-cli.sh <command> --help`
-for per-command options.
+`share`, `fetch`, `list`, and `delete` subcommands. Run `./bin/share-cli.sh --help`, or
+`./bin/share-cli.sh <command> --help` for per-command options.
+
+### Server location
+
+The CLI talks to the server over HTTP, so it can run on a different machine from the server.
+Every command accepts `--url BASE_URL`; without it the CLI uses `$SHARE_URL`, and without
+that `http://localhost:9100`. The URL is `scheme://host[:port]` with no path, query, or
+credentials: the CLI appends `/share/api` itself. There is no port flag, the port is part of the URL.
+
+```bash
+# Server on this machine (default)
+./bin/share-cli.sh list
+
+# Server reached through Tailscale serve (HTTPS, see Remote Access below)
+./bin/share-cli.sh list --url https://<tailscale-hostname>:9443
+
+# Server reached directly over the tailnet
+./bin/share-cli.sh list --url http://<tailscale-ip>:9100
+
+# Set once per shell on a client machine; the Claude Code skills pick it up too
+export SHARE_URL=https://<tailscale-hostname>:9443
+
+# Local test instance (python3 src/server.py --test)
+./bin/share-cli.sh list --url http://localhost:9101
+```
+
+A client machine needs `bash`, `curl`, `python3`, and a clone of this repo. The server's
+client-IP guard admits tailnet addresses, so no server configuration is needed for a client
+on the tailnet; see Security below for other networks.
 
 ### Share
 
@@ -71,9 +98,6 @@ for per-command options.
 # Share a file (optionally with category and title)
 ./bin/share-cli.sh share /path/to/document.pdf
 ./bin/share-cli.sh share -c "docs" -t "API Reference" /path/to/api-docs.pdf
-
-# Share a directory (appears in the Folders tab)
-./bin/share-cli.sh share /path/to/directory
 
 # Pipe support (always creates a note)
 echo "some text" | ./bin/share-cli.sh share -t "Piped Note"
@@ -144,7 +168,7 @@ Delete a note or file from the app by title. Confirms the matched item before de
 /personal-delete deploy reminder
 ```
 
-The skills are deployed to `~/.claude/skills/` by the deploy script, making them available globally in Claude Code. They call the `share-cli.sh` subcommands (`share`, `fetch`, `list`, `delete`) under the hood.
+The skills are deployed to `~/.claude/skills/` by the deploy script, making them available globally in Claude Code. They call the `share-cli.sh` subcommands (`share`, `fetch`, `list`, `delete`) under the hood and inherit `$SHARE_URL` from the shell, so on a client machine they reach a remote server without any per-skill configuration.
 
 ## File Watcher
 
@@ -239,7 +263,7 @@ pip install -r requirements.txt
 # All tests (unit + E2E)
 pytest test/
 
-# Unit tests only (103 tests, 93% coverage)
+# Unit tests only (116 tests, 94% coverage)
 pytest test/unit/
 
 # E2E browser tests (requires: pip install pytest-playwright && playwright install chromium)
@@ -280,12 +304,6 @@ This starts on port 9101 with a separate database and content directory. Product
 | POST | `/api/sync/pull` | Pull items since timestamp |
 | POST | `/api/sync/push` | Push items (last-write-wins) |
 | POST | `/api/share` | Share target endpoint (multipart) |
-| POST | `/api/folders` | Share a folder (symlink + DB entry) |
-| GET | `/api/folders` | List shared folders |
-| GET | `/api/folders/{name}` | List files in a shared folder |
-| GET | `/api/folders/{name}/files/{filename}` | Download a file from a shared folder |
-| GET | `/api/folders/{name}/files/{filename}/render` | Render a shared-folder file inline |
-| DELETE | `/api/folders/{name}` | Unshare a folder (removes symlink only) |
 | WS | `/ws` | Real-time notifications |
 
 All endpoints are accessed via the `/share` prefix from the browser (e.g., `/share/api/items`). The server middleware strips this prefix so route handlers use unprefixed paths.
@@ -305,13 +323,11 @@ src/
   database.py        # SQLite schema, CRUD operations
   modules/
     items.py         # API routes: items, categories, sync, share
-    folders.py       # API routes: shared folder browsing
-    watcher.py       # Filesystem watcher with debounce (content + folders)
+    watcher.py       # Filesystem watcher with debounce
 public/              # Frontend SPA (served as static files)
 data/
   share.db           # SQLite database (created on first run)
   content/           # Watched directory (subdirs = categories)
-  folders/           # Symlinks to shared directories
 skills/
   personal-share/    # Claude Code skill for sharing
   personal-fetch/    # Claude Code skill for fetching
